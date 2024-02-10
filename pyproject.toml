@@ -20,3 +20,7 @@ build = [
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+[[tool.mypy.overrides]]
+module = "amaranth.*"
+ignore_missing_imports = true
