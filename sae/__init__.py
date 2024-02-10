@@ -12,3 +12,7 @@ class Sae(rainhdx.Project):
     name = "sae"
     top = rtl.Top
     formal_top = formal.Top
+
+
+class icebreaker(ICEBreakerPlatform, rainhdx.Platform):
+    pass
