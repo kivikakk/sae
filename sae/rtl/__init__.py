@@ -73,7 +73,16 @@ class Top(Elaboratable):
                     # sx imm to XLEN
                     sxi = Signal(signed(32))
                     m.d.comb += sxi.eq(v.imm.as_signed())
-                    m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + sxi)
+
+                    with m.Switch(v.funct):
+                        with m.Case(OpImmFunct.ADDI):
+                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + sxi)
+                        with m.Case(OpImmFunct.SLTI):
+                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] < sxi)
+                        with m.Case(OpImmFunct.SLTIU):
+                            m.d.sync += self.xreg[v.rd].eq(
+                                self.xreg[v.rs1] < sxi.as_unsigned()
+                            )
 
                     m.d.sync += self.pc.eq(self.pc + 1)
                     m.next = "fetch.init"

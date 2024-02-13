@@ -24,7 +24,7 @@ def run_until_fault(top):
             last_pc, pc = pc, (yield top.pc)
             if pc != last_pc:
                 print(f"pc={pc:08x}  ", end="")
-                for i in range(1, 4):
+                for i in range(1, 6):
                     print(f"  x{i}={(yield top.xreg[i]):08x}", end="")
                 print()
 
@@ -68,6 +68,14 @@ class InsnTestHelpers:
     def Addi(self, rs1, rd, imm):
         self.__ensureInBody()
         self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.ADDI, rs1, rd, C(imm, 12)))
+
+    def Slti(self, rs1, rd, imm):
+        self.__ensureInBody()
+        self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.SLTI, rs1, rd, C(imm, 12)))
+
+    def Sltiu(self, rs1, rd, imm):
+        self.__ensureInBody()
+        self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.SLTIU, rs1, rd, C(imm, 12)))
 
     def assertReg(self, r, v):
         self.__ensureRun()

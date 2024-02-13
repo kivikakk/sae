@@ -18,5 +18,37 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
             self.Addi(Reg.X1, Reg.X2, -2)
         self.assertRegs(("x1", 1), ("x2", -1), ("rest", Unchanged))
 
+        with self.Run():
+            self.Addi(Reg.X0, Reg.X1, 1)
+            self.Addi(Reg.X1, Reg.X2, -2)
+            self.Addi(Reg.X2, Reg.X3, -3)
+        self.assertRegs(("x1", 1), ("x2", -1), ("x3", -4), ("rest", Unchanged))
+
     def test_slti(self):
-        pass
+        with self.Run():
+            self.Slti(Reg.X0, Reg.X1, 0)
+        self.assertRegs(("x1", 0), ("rest", Unchanged))
+
+        with self.Run():
+            self.Slti(Reg.X0, Reg.X1, 1)
+        self.assertRegs(("x1", 1))
+
+        with self.Run():
+            self.Slti(Reg.X0, Reg.X1, -1)
+        self.assertRegs(("x1", 0))
+
+    def test_sltiu(self):
+        with self.Run():
+            self.Addi(Reg.X0, Reg.X1, 1)
+            self.Sltiu(Reg.X1, Reg.X2, 1)
+        self.assertRegs(("x1", 1), ("x2", 0), ("rest", Unchanged))
+
+        with self.Run():
+            self.Addi(Reg.X0, Reg.X1, 1)
+            self.Sltiu(Reg.X1, Reg.X2, 2)
+        self.assertRegs(("x1", 1), ("x2", 1), ("rest", Unchanged))
+
+        with self.Run():
+            self.Addi(Reg.X0, Reg.X1, 1)
+            self.Sltiu(Reg.X1, Reg.X2, -1)  # 2^32-1 > 1
+        self.assertRegs(("x1", 1), ("x2", 1), ("rest", Unchanged))
