@@ -86,6 +86,8 @@ class InsnTestHelpers:
         # XXX: we don't actually check for unchanged yet
         if expected is Unchanged:
             expected = 0
+        if expected < 0:
+            expected += 2**32
         self.assertEqual(expected, actual)
 
     def assertRegs(self, *pairs):

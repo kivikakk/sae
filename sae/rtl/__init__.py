@@ -1,4 +1,4 @@
-from amaranth import Elaboratable, Module, Signal, Array, C
+from amaranth import Elaboratable, Module, Signal, Array, C, signed
 from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
@@ -69,7 +69,12 @@ class Top(Elaboratable):
                 with m.Else():
                     # we can only add for now, so let's add.
                     v = InsIS(self.sysmem_rd.data)
-                    m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + v.imm)
+
+                    # sx imm to XLEN
+                    sxi = Signal(signed(32))
+                    m.d.comb += sxi.eq(v.imm.as_signed())
+                    m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + sxi)
+
                     m.d.sync += self.pc.eq(self.pc + 1)
                     m.next = "fetch.init"
 
