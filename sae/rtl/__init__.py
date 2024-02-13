@@ -1,6 +1,6 @@
 from typing import Optional
 
-from amaranth import Array, C, Elaboratable, Module, Signal, signed
+from amaranth import Array, C, Elaboratable, Module, Mux, Signal, signed
 from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
@@ -120,6 +120,18 @@ class Top(Elaboratable):
                                 m.d.sync += self.xreg_written[v.rd].eq(1)
                         with m.Case(OpImmFunct.XORI):
                             m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] ^ sxi)
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
+                        with m.Case(OpImmFunct.SLLI):
+                            m.d.sync += self.xreg[v.rd].eq(
+                                self.xreg[v.rs1] << v.imm[:5]
+                            )
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
+                        with m.Case(OpImmFunct.SRI):
+                            rs1 = self.xreg[v.rs1]
+                            rs1 = Mux(v.imm[10], rs1.as_signed(), rs1)
+                            m.d.sync += self.xreg[v.rd].eq(rs1 >> v.imm[:5])
                             if self.track_reg_written:
                                 m.d.sync += self.xreg_written[v.rd].eq(1)
 

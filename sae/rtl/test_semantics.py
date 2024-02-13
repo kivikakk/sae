@@ -92,3 +92,46 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
         with self.Run(x1=0xAAA):
             self.Xori(Reg.X1, Reg.X2, 0xAAA)  # sx to 0xFFFFFAAA
         self.assertRegs(x2=0xFFFFF000)
+
+    def test_slli(self):
+        with self.Run(x1=0x55555555):
+            self.Slli(Reg.X1, Reg.X2, 1)
+        self.assertRegs(x2=0xAAAAAAAA)
+
+        with self.Run(x1=0x55555555):
+            self.Slli(Reg.X1, Reg.X2, 2)
+        self.assertRegs(x2=0x55555554)
+
+        with self.Run(x1=0x55555555):
+            self.Slli(Reg.X1, Reg.X2, 3)
+        self.assertRegs(x2=0xAAAAAAA8)
+
+        with self.Run(x1=0x55555555):
+            self.Slli(Reg.X1, Reg.X2, 4)
+        self.assertRegs(x2=0x55555550)
+
+    def test_srli(self):
+        with self.Run(x1=0x55555555):
+            self.Srli(Reg.X1, Reg.X2, 1)
+        self.assertRegs(x2=0x2AAAAAAA)
+
+        with self.Run(x1=0x55555555):
+            self.Srli(Reg.X1, Reg.X2, 2)
+        self.assertRegs(x2=0x15555555)
+
+    def test_srai(self):
+        with self.Run(x1=0x55555555):
+            self.Srai(Reg.X1, Reg.X2, 1)
+        self.assertRegs(x2=0x2AAAAAAA)
+
+        with self.Run(x1=0xAAAAAAAA):
+            self.Srai(Reg.X1, Reg.X2, 1)
+        self.assertRegs(x2=0xD5555555)
+
+        with self.Run(x1=0xAAAAAAAA):
+            self.Srai(Reg.X1, Reg.X2, 2)
+        self.assertRegs(x2=0xEAAAAAAA)
+
+        with self.Run(x1=0xAAAAAAAA):
+            self.Srai(Reg.X1, Reg.X2, 3)
+        self.assertRegs(x2=0xF5555555)

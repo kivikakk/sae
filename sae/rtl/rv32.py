@@ -48,6 +48,8 @@ class OpImmFunct(Enum, shape=3):
     XORI = 0b100
     ORI = 0b110
     ANDI = 0b111
+    SLLI = 0b001
+    SRI = 0b101
 
 
 # R:
