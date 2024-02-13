@@ -4,7 +4,7 @@ from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import Enum, IntEnum
 
-__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "InsI", "InsU"]
+__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "InsI", "InsU", "InsR"]
 
 INSNS = {}
 
@@ -65,6 +65,19 @@ class OpImmFunct(Enum, shape=3):
     SRI = 0b101
 
 
+class OpRegFunct(Enum, shape=10):
+    ADD = 0b000
+    SLT = 0b010
+    SLTU = 0b011
+    AND = 0b111
+    OR = 0b110
+    XOR = 0b100
+    SLL = 0b001
+    SRL = 0b101
+    SUB = 0b0100000000
+    SRA = 0b0100000101
+
+
 # R:
 #   31-25: funct7
 #   24-20: rs2
@@ -72,6 +85,30 @@ class OpImmFunct(Enum, shape=3):
 #   14-12: funct3
 #    11-7: rd
 #     6-0: opcode
+class InsR(Struct):
+    opcode: Opcode
+    rd: Reg
+    funct3: unsigned(3)
+    rs1: Reg
+    rs2: Reg
+    funct7: unsigned(7)
+
+
+for op in ["add", "slt", "sltu", "and", "or", "xor", "sll", "srl", "sub", "sra"]:
+
+    def f(op, rs1, rs2, rd):
+        funct = OpRegFunct[op.upper()]
+        return value(
+            InsR,
+            opcode=Opcode.OP,
+            funct3=funct & 0x7,
+            rs1=rs1,
+            rs2=rs2,
+            rd=rd,
+            funct7=funct >> 3,
+        )
+
+    add_insn(op, f)
 
 
 # I:
