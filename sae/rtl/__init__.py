@@ -50,6 +50,8 @@ class Top(Elaboratable):
         if xn == 0:
             return 0
         v = (self.reg_inits or {}).get(f"x{xn}", 0)
+        if v < 0:
+            v += 2**self.XLEN
         return v
 
     def elaborate(self, platform):
@@ -106,6 +108,18 @@ class Top(Elaboratable):
                             m.d.sync += self.xreg[v.rd].eq(
                                 self.xreg[v.rs1] < sxi.as_unsigned()
                             )
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
+                        with m.Case(OpImmFunct.ANDI):
+                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] & sxi)
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
+                        with m.Case(OpImmFunct.ORI):
+                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] | sxi)
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
+                        with m.Case(OpImmFunct.XORI):
+                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] ^ sxi)
                             if self.track_reg_written:
                                 m.d.sync += self.xreg_written[v.rd].eq(1)
 

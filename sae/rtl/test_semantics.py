@@ -50,7 +50,45 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
             self.Sltiu(Reg.X1, Reg.X2, -1)  # 2^32-1 > 1
         self.assertRegs(x2=1)
 
-    # def test_andi(self):
-    #     with self.Run(x1=1):
-    #         self.Andi(Reg.X1, Reg.X2, Reg, 3)
-    #     self.assertRegs(x2=1)
+    def test_andi(self):
+        with self.Run(x1=1):
+            self.Andi(Reg.X1, Reg.X2, 3)
+        self.assertRegs(x2=1)
+
+        with self.Run(x1=-1):
+            self.Andi(Reg.X1, Reg.X2, 3)
+        self.assertRegs(x2=3)
+
+        with self.Run(x1=3):
+            self.Andi(Reg.X1, Reg.X2, -1)
+        self.assertRegs(x2=3)
+
+    def test_ori(self):
+        with self.Run(x1=1):
+            self.Ori(Reg.X1, Reg.X2, 2)
+        self.assertRegs(x2=3)
+
+        with self.Run(x1=1):
+            self.Ori(Reg.X1, Reg.X2, -2)
+        self.assertRegs(x2=-1)
+
+        with self.Run(x1=-2):
+            self.Ori(Reg.X1, Reg.X2, 1)
+        self.assertRegs(x2=-1)
+
+    def test_xori(self):
+        with self.Run(x1=0xAAAAAAAA):
+            self.Xori(Reg.X1, Reg.X2, -1)
+        self.assertRegs(x2=0x55555555)
+
+        with self.Run():
+            self.Xori(Reg.X0, Reg.X1, -1)
+        self.assertRegs(x1=-1)
+
+        with self.Run(x1=0x555):
+            self.Xori(Reg.X1, Reg.X2, 0x555)
+        self.assertRegs(x2=0)
+
+        with self.Run(x1=0xAAA):
+            self.Xori(Reg.X1, Reg.X2, 0xAAA)  # sx to 0xFFFFFAAA
+        self.assertRegs(x2=0xFFFFF000)

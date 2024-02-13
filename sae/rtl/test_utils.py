@@ -1,8 +1,7 @@
 from contextlib import contextmanager
 from functools import partialmethod
 
-from amaranth import C
-from amaranth.hdl.mem import Memory
+from amaranth import C, Memory, signed
 from amaranth.sim import Simulator, Tick
 
 from . import InsI, Opcode, OpImmFunct, Reg, State, Top
@@ -93,7 +92,7 @@ class InsnTestHelpers:
             self.assertIs(actual, Unwritten)
             return
         if expected < 0:
-            expected += 2**32
+            expected += 2**32  # XLEN
         self.assertEqual(expected, actual)
 
     def assertRegs(self, **regs):
@@ -111,9 +110,10 @@ class InsnTestHelpers:
 for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 
     def f(self, op, rs1, rd, imm):
+        immc = C(imm, signed(12))
         self._InsnTestHelpers__ensureInBody()
         self._InsnTestHelpers__body.append(
-            InsI(Opcode.OP_IMM, OpImmFunct[op.upper()], rs1, rd, C(imm, 12))
+            InsI(Opcode.OP_IMM, OpImmFunct[op.upper()], rs1, rd, C(imm, signed(12)))
         )
 
     name = op[0].upper() + op[1:]
