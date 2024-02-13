@@ -153,9 +153,7 @@ class Top(Elaboratable):
                             if self.track_reg_written:
                                 m.d.sync += self.xreg_written[v_u.rd].eq(1)
                         with m.Case(Opcode.AUIPC):
-                            m.d.sync += self.xreg[v_u.rd].eq(
-                                (v_u.imm << 12) | self.pc[:12]
-                            )
+                            m.d.sync += self.xreg[v_u.rd].eq((v_u.imm << 12) + self.pc)
                             if self.track_reg_written:
                                 m.d.sync += self.xreg_written[v_u.rd].eq(1)
                     m.d.sync += self.pc.eq(self.pc + 4)
