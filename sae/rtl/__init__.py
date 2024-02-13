@@ -39,13 +39,9 @@ class Top(Elaboratable):
             width=8 * 4,
             depth=1024 // 4,
             init=[
-                # ADDI x1, x0, 3 (= MV x1, 3)
                 rv32.Addi(Reg.X0, Reg.X1, 3),
-                # ADDI x2, x1, 5
                 rv32.Addi(Reg.X1, Reg.X2, 5),
-                # SRAI x3, x2, 3
                 rv32.Srai(Reg.X2, Reg.X3, 3),
-                # !
                 0,
             ],
         )

@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from functools import wraps
+from functools import partialmethod
 
 from amaranth import Memory
 from amaranth.sim import Simulator, Tick
@@ -105,14 +105,7 @@ class InsnTestHelpers:
             else:
                 raise NotImplementedError(r)
 
-    @classmethod
-    def add_insn(cls, name, f):
-        @wraps(f)
-        def wrapped(self, *args, **kwargs):
-            self.__append(f(*args, **kwargs))
-
-        setattr(cls, name, wrapped)
-
-
-for name, f in INSNS.items():
-    InsnTestHelpers.add_insn(name, f)
+    for name, f in INSNS.items():
+        locals()[name] = partialmethod(
+            lambda self, f, *args, **kwargs: self.__append(f(*args, **kwargs)), f
+        )
