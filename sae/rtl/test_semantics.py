@@ -1,7 +1,7 @@
 import unittest
 
 from . import InsI, InsIS, Opcode, OpImmFunct, Reg, State, Top
-from .test_utils import InsnTestHelpers, Unchanged
+from .test_utils import InsnTestHelpers
 
 __all__ = ["TestInsns"]
 
@@ -11,44 +11,46 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
         with self.Run():
             self.Addi(Reg.X0, Reg.X1, 3)
             self.Addi(Reg.X1, Reg.X2, 5)
-        self.assertRegs(("x1", 3), ("x2", 8), ("rest", Unchanged))
+        self.assertRegs(x1=3, x2=8)
 
         with self.Run():
             self.Addi(Reg.X0, Reg.X1, 1)
             self.Addi(Reg.X1, Reg.X2, -2)
-        self.assertRegs(("x1", 1), ("x2", -1), ("rest", Unchanged))
+        self.assertRegs(x1=1, x2=-1)
 
         with self.Run():
             self.Addi(Reg.X0, Reg.X1, 1)
             self.Addi(Reg.X1, Reg.X2, -2)
             self.Addi(Reg.X2, Reg.X3, -3)
-        self.assertRegs(("x1", 1), ("x2", -1), ("x3", -4), ("rest", Unchanged))
+        self.assertRegs(x1=1, x2=-1, x3=-4)
 
     def test_slti(self):
         with self.Run():
             self.Slti(Reg.X0, Reg.X1, 0)
-        self.assertRegs(("x1", 0), ("rest", Unchanged))
+        self.assertRegs(x1=0)
 
         with self.Run():
             self.Slti(Reg.X0, Reg.X1, 1)
-        self.assertRegs(("x1", 1))
+        self.assertRegs(x1=1)
 
         with self.Run():
             self.Slti(Reg.X0, Reg.X1, -1)
-        self.assertRegs(("x1", 0))
+        self.assertRegs(x1=0)
 
     def test_sltiu(self):
-        with self.Run():
-            self.Addi(Reg.X0, Reg.X1, 1)
+        with self.Run(x1=1):
             self.Sltiu(Reg.X1, Reg.X2, 1)
-        self.assertRegs(("x1", 1), ("x2", 0), ("rest", Unchanged))
+        self.assertRegs(x2=0)
 
-        with self.Run():
-            self.Addi(Reg.X0, Reg.X1, 1)
+        with self.Run(x1=1):
             self.Sltiu(Reg.X1, Reg.X2, 2)
-        self.assertRegs(("x1", 1), ("x2", 1), ("rest", Unchanged))
+        self.assertRegs(x2=1)
 
-        with self.Run():
-            self.Addi(Reg.X0, Reg.X1, 1)
+        with self.Run(x1=1):
             self.Sltiu(Reg.X1, Reg.X2, -1)  # 2^32-1 > 1
-        self.assertRegs(("x1", 1), ("x2", 1), ("rest", Unchanged))
+        self.assertRegs(x2=1)
+
+    # def test_andi(self):
+    #     with self.Run(x1=1):
+    #         self.Andi(Reg.X1, Reg.X2, Reg, 3)
+    #     self.assertRegs(x2=1)

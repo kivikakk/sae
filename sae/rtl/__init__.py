@@ -1,9 +1,10 @@
-from amaranth import Elaboratable, Module, Signal, Array, C, signed
+from typing import Optional
+
+from amaranth import Array, C, Elaboratable, Module, Signal, signed
 from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
-from .rv32 import Opcode, OpImmFunct, Reg, InsI, InsIS
-
+from .rv32 import InsI, InsIS, Opcode, OpImmFunct, Reg
 
 __all__ = ["Top", "State"]
 
@@ -17,14 +18,19 @@ class Top(Elaboratable):
     ILEN = 32
     XLEN = 32
 
+    sysmem: Memory
+    reg_inits: Optional[dict[str, int]]
+    track_reg_written: bool
+
     sysmem_rd: ReadPort
     sysmem_wr: WritePort
 
     state: Signal
     xreg: Array[Signal]
+    xreg_written: Optional[Array[Signal]]
     pc: Signal
 
-    def __init__(self, *, sysmem=None):
+    def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or Memory(
             width=8 * 4,
             depth=1024 // 4,
@@ -37,6 +43,14 @@ class Top(Elaboratable):
                 0,
             ],
         )
+        self.reg_inits = reg_inits
+        self.track_reg_written = track_reg_written
+
+    def reg_reset(self, xn):
+        if xn == 0:
+            return 0
+        v = (self.reg_inits or {}).get(f"x{xn}", 0)
+        return v
 
     def elaborate(self, platform):
         m = Module()
@@ -45,7 +59,12 @@ class Top(Elaboratable):
         self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port()
 
         self.state = Signal(State)
-        self.xreg = Array(Signal(self.XLEN) for _ in range(32))
+        self.xreg = Array(
+            Signal(self.XLEN, reset=self.reg_reset(xn)) for xn in range(32)
+        )
+        if self.track_reg_written:
+            self.xreg_written = Array(Signal() for _ in range(32))
+
         self.pc = Signal(self.XLEN)
 
         m.d.comb += self.state.eq(State.RUNNING)
@@ -77,12 +96,18 @@ class Top(Elaboratable):
                     with m.Switch(v.funct):
                         with m.Case(OpImmFunct.ADDI):
                             m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + sxi)
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
                         with m.Case(OpImmFunct.SLTI):
                             m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] < sxi)
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
                         with m.Case(OpImmFunct.SLTIU):
                             m.d.sync += self.xreg[v.rd].eq(
                                 self.xreg[v.rs1] < sxi.as_unsigned()
                             )
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v.rd].eq(1)
 
                     m.d.sync += self.pc.eq(self.pc + 1)
                     m.next = "fetch.init"

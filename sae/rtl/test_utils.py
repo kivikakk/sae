@@ -1,11 +1,13 @@
+from contextlib import contextmanager
+from functools import partialmethod
+
 from amaranth import C
 from amaranth.hdl.mem import Memory
 from amaranth.sim import Simulator, Tick
-from contextlib import contextmanager
 
-from . import InsI, Opcode, OpImmFunct, State, Top, Reg
+from . import InsI, Opcode, OpImmFunct, Reg, State, Top
 
-__all__ = ["run_until_fault", "Unchanged", "InsnTestHelpers"]
+__all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
 
 def run_until_fault(top):
@@ -30,7 +32,8 @@ def run_until_fault(top):
 
         results["pc"] = yield top.pc
         for i in range(1, 32):
-            results[f"x{i}"] = yield top.xreg[i]
+            if not top.track_reg_written or (yield top.xreg_written[i]):
+                results[f"x{i}"] = yield top.xreg[i]
 
     sim = Simulator(top)
     sim.add_clock(1e6)
@@ -40,7 +43,12 @@ def run_until_fault(top):
     return results
 
 
-Unchanged = object()
+class UnwrittenClass:
+    def __repr__(self):
+        return "Unwritten"
+
+
+Unwritten = UnwrittenClass()
 
 
 class InsnTestHelpers:
@@ -49,11 +57,13 @@ class InsnTestHelpers:
         self.__body = None
 
     @contextmanager
-    def Run(self):
+    def Run(self, **regs):
         self.__body = []
         yield
         top = Top(
-            sysmem=Memory(width=32, depth=len(self.__body) + 1, init=self.__body + [0])
+            sysmem=Memory(width=32, depth=len(self.__body) + 1, init=self.__body + [0]),
+            reg_inits=regs,
+            track_reg_written=True,
         )
         self.__results = run_until_fault(top)
         self.__body = None
@@ -65,23 +75,11 @@ class InsnTestHelpers:
     def __ensureRun(self):
         assert self.__results is not None
 
-    def Addi(self, rs1, rd, imm):
-        self.__ensureInBody()
-        self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.ADDI, rs1, rd, C(imm, 12)))
-
-    def Slti(self, rs1, rd, imm):
-        self.__ensureInBody()
-        self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.SLTI, rs1, rd, C(imm, 12)))
-
-    def Sltiu(self, rs1, rd, imm):
-        self.__ensureInBody()
-        self.__body.append(InsI(Opcode.OP_IMM, OpImmFunct.SLTIU, rs1, rd, C(imm, 12)))
-
     def assertReg(self, r, v):
         self.__ensureRun()
         rn = f"x{int(r)}"
         self.__asserted.add(rn)
-        self.assertRegValue(v, self.__results[rn])
+        self.assertRegValue(v, self.__results.get(rn, Unwritten))
 
     def assertRegRest(self, v):
         self.__ensureRun()
@@ -91,18 +89,33 @@ class InsnTestHelpers:
             self.assertRegValue(v, result)
 
     def assertRegValue(self, expected, actual):
-        # XXX: we don't actually check for unchanged yet
-        if expected is Unchanged:
-            expected = 0
+        if expected is Unwritten:
+            self.assertIs(actual, Unwritten)
+            return
         if expected < 0:
             expected += 2**32
         self.assertEqual(expected, actual)
 
-    def assertRegs(self, *pairs):
-        for r, v in pairs:
+    def assertRegs(self, **regs):
+        if "rest" not in regs:
+            regs["rest"] = Unwritten
+        for r, v in regs.items():
             if r[0] == "x":
                 self.assertReg(Reg[f"X{r[1:]}"], v)
             elif r == "rest":
                 self.assertRegRest(v)
             else:
                 raise NotImplementedError(r)
+
+
+for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
+
+    def f(self, op, rs1, rd, imm):
+        self._InsnTestHelpers__ensureInBody()
+        self._InsnTestHelpers__body.append(
+            InsI(Opcode.OP_IMM, OpImmFunct[op.upper()], rs1, rd, C(imm, 12))
+        )
+
+    name = op[0].upper() + op[1:]
+    f.__name__ = name
+    setattr(InsnTestHelpers, name, partialmethod(f, op))
