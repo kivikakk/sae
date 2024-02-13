@@ -4,7 +4,7 @@ from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import Enum, IntEnum
 
-__all__ = ["Reg", "Opcode", "OpImmFunct", "InsI", "INSNS"]
+__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "InsI", "InsU"]
 
 INSNS = {}
 
@@ -19,16 +19,15 @@ def add_insn(op, f):
     __all__.append(f)
 
 
+def value(struct, **kwargs):
+    return struct.const(kwargs).as_value().value
+
+
 class Reg(IntEnum, shape=5):
-    X0 = 0
-    X1 = 1
-    X2 = 2
-    X3 = 3
-    X4 = 4
-    X5 = 5
-    # ...
-    X30 = 30
-    X31 = 31
+    # X0..X31 = 0..31
+    global i
+    for i in range(32):
+        locals()[f"X{i}"] = i
 
 
 class Opcode(Enum, shape=7):
@@ -89,19 +88,15 @@ class InsI(Struct):
     imm: unsigned(12)
 
 
-def value(struct, **kwargs):
-    return struct.const(kwargs).as_value().value
-
-
 # TODO: bounds checking on imm arguments
 
 for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 
     def f(op, rs1, rd, imm):
         if imm > 0:
-            assert 0 < imm <= 0b111111111111, f"imm is {imm}"
+            assert 0 < imm <= 2**12 - 1, f"imm is {imm}"
         elif imm < 0:
-            assert 0 < -imm <= 0b111111111111, f"imm is {imm}"  # XXX check
+            assert 0 < -imm <= 2**12 - 1, f"imm is {imm}"  # XXX check
 
         return value(
             InsI,
@@ -160,6 +155,25 @@ for op in ["slli", "srli", "srai"]:
 #   31-12: imm[31:12]
 #    11-7: rd
 #     6-0: opcode
+class InsU(Struct):
+    opcode: Opcode
+    rd: Reg
+    imm: unsigned(20)
+
+
+for op in ["lui", "auipc"]:
+
+    def f(op, rd, imm):
+        if imm > 0:
+            assert 0 < imm <= 2**20 - 1, f"imm is {imm}"
+        elif imm < 0:
+            assert (
+                0 < -imm <= 2**20 - 1
+            ), f"imm is {imm}"  # XXX check as above; boundary conditions etc.
+
+        return value(InsU, opcode=Opcode[op.upper()], rd=rd, imm=imm)
+
+    add_insn(op, f)
 
 
 # J:

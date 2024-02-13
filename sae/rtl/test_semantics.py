@@ -136,3 +136,12 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
         with self.Run(x1=0xAAAAAAAA):
             self.Srai(Reg.X1, Reg.X2, 3)
         self.assertRegs(x2=0xF5555555)
+
+    def test_lui(self):
+        with self.Run():
+            self.Lui(Reg.X1, 0x12345)
+        self.assertRegs(x1=0x12345000)
+
+        with self.Run():
+            self.Lui(Reg.X1, 0xFFFFF)
+        self.assertRegs(x1=0xFFFFF000)

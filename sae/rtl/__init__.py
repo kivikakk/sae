@@ -5,7 +5,7 @@ from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
-from .rv32 import InsI, OpImmFunct, Reg
+from .rv32 import InsI, InsU, Opcode, OpImmFunct, Reg
 
 __all__ = [
     "Top",
@@ -90,52 +90,68 @@ class Top(Elaboratable):
                 ):
                     m.next = "faulted"
                 with m.Else():
-                    v = InsI(self.sysmem_rd.data)
+                    v_i = InsI(self.sysmem_rd.data)
+                    v_u = InsU(self.sysmem_rd.data)
 
-                    # sx imm to XLEN
-                    sxi = Signal(signed(32))
-                    m.d.comb += sxi.eq(v.imm.as_signed())
+                    # sx I imm to XLEN
+                    v_sxi = Signal(signed(32))
+                    m.d.comb += v_sxi.eq(v_i.imm.as_signed())
 
-                    with m.Switch(v.funct):
-                        with m.Case(OpImmFunct.ADDI):
-                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] + sxi)
+                    with m.Switch(v_i.opcode):
+                        with m.Case(Opcode.OP_IMM):
+                            with m.Switch(v_i.funct):
+                                with m.Case(OpImmFunct.ADDI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] + v_sxi
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.SLTI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] < v_sxi
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.SLTIU):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] < v_sxi.as_unsigned()
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.ANDI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] & v_sxi
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.ORI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] | v_sxi
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.XORI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] ^ v_sxi
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.SLLI):
+                                    m.d.sync += self.xreg[v_i.rd].eq(
+                                        self.xreg[v_i.rs1] << v_i.imm[:5]
+                                    )
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                with m.Case(OpImmFunct.SRI):
+                                    rs1 = self.xreg[v_i.rs1]
+                                    rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
+                                    m.d.sync += self.xreg[v_i.rd].eq(rs1 >> v_i.imm[:5])
+                                    if self.track_reg_written:
+                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                        with m.Case(Opcode.LUI):
+                            m.d.sync += self.xreg[v_u.rd].eq(v_u.imm << 12)
                             if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.SLTI):
-                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] < sxi)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.SLTIU):
-                            m.d.sync += self.xreg[v.rd].eq(
-                                self.xreg[v.rs1] < sxi.as_unsigned()
-                            )
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.ANDI):
-                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] & sxi)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.ORI):
-                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] | sxi)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.XORI):
-                            m.d.sync += self.xreg[v.rd].eq(self.xreg[v.rs1] ^ sxi)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.SLLI):
-                            m.d.sync += self.xreg[v.rd].eq(
-                                self.xreg[v.rs1] << v.imm[:5]
-                            )
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-                        with m.Case(OpImmFunct.SRI):
-                            rs1 = self.xreg[v.rs1]
-                            rs1 = Mux(v.imm[10], rs1.as_signed(), rs1)
-                            m.d.sync += self.xreg[v.rd].eq(rs1 >> v.imm[:5])
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v.rd].eq(1)
-
+                                m.d.sync += self.xreg_written[v_u.rd].eq(1)
                     m.d.sync += self.pc.eq(self.pc + 1)
                     m.next = "fetch.init"
 
