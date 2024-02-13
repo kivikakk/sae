@@ -1,11 +1,11 @@
-from amaranth import unsigned, Signal, Const
+from amaranth import unsigned
 from amaranth.lib.data import Struct
-from amaranth.lib.enum import Enum
+from amaranth.lib.enum import Enum, IntEnum
 
 __all__ = ["Reg", "Opcode", "OpImmFunct", "InsI", "InsIS"]
 
 
-class Reg(Enum, shape=5):
+class Reg(IntEnum, shape=5):
     X0 = 0
     X1 = 1
     X2 = 2
