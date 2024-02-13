@@ -24,10 +24,8 @@ class Top(Elaboratable):
     xreg: Array[Signal]
     pc: Signal
 
-    def elaborate(self, platform):
-        m = Module()
-
-        sysmem = Memory(
+    def __init__(self, *, sysmem=None):
+        self.sysmem = sysmem or Memory(
             width=8 * 4,
             depth=1024 // 4,
             init=[
@@ -39,8 +37,12 @@ class Top(Elaboratable):
                 0,
             ],
         )
-        self.sysmem_rd = m.submodules.sysmem_rd = sysmem.read_port()
-        self.sysmem_wr = m.submodules.sysmem_wr = sysmem.write_port()
+
+    def elaborate(self, platform):
+        m = Module()
+
+        self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
+        self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port()
 
         self.state = Signal(State)
         self.xreg = Array(Signal(self.XLEN) for _ in range(32))
