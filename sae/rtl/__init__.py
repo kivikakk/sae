@@ -4,9 +4,13 @@ from amaranth import Array, C, Elaboratable, Module, Mux, Signal, signed
 from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
-from .rv32 import InsI, InsIS, Opcode, OpImmFunct, Reg
+from . import rv32
+from .rv32 import InsI, OpImmFunct, Reg
 
-__all__ = ["Top", "State"]
+__all__ = [
+    "Top",
+    "State",
+]
 
 
 class State(IntEnum):
@@ -36,9 +40,11 @@ class Top(Elaboratable):
             depth=1024 // 4,
             init=[
                 # ADDI x1, x0, 3 (= MV x1, 3)
-                InsI(Opcode.OP_IMM, OpImmFunct.ADDI, Reg.X0, Reg.X1, C(3, 12)),
+                rv32.Addi(Reg.X0, Reg.X1, 3),
                 # ADDI x2, x1, 5
-                InsI(Opcode.OP_IMM, OpImmFunct.ADDI, Reg.X1, Reg.X2, C(5, 12)),
+                rv32.Addi(Reg.X1, Reg.X2, 5),
+                # SRAI x3, x2, 3
+                rv32.Srai(Reg.X2, Reg.X3, 3),
                 # !
                 0,
             ],
@@ -88,8 +94,7 @@ class Top(Elaboratable):
                 ):
                     m.next = "faulted"
                 with m.Else():
-                    # we can only add for now, so let's add.
-                    v = InsIS(self.sysmem_rd.data)
+                    v = InsI(self.sysmem_rd.data)
 
                     # sx imm to XLEN
                     sxi = Signal(signed(32))

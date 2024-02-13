@@ -1,6 +1,7 @@
 import unittest
 
-from . import InsI, InsIS, Opcode, OpImmFunct, Reg, State, Top
+from . import State, Top
+from .rv32 import Reg
 from .test_utils import InsnTestHelpers
 
 __all__ = ["TestInsns"]

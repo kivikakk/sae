@@ -1,8 +1,22 @@
+from functools import partial
+
 from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import Enum, IntEnum
 
-__all__ = ["Reg", "Opcode", "OpImmFunct", "InsI", "InsIS"]
+__all__ = ["Reg", "Opcode", "OpImmFunct", "InsI", "INSNS"]
+
+INSNS = {}
+
+
+def add_insn(op, f):
+    global INSNS, __all__
+    name = op[0].upper() + op[1:]
+    f.__name__ = name
+    f = partial(f, op)
+    INSNS[name] = f
+    globals()[name] = f
+    __all__.append(f)
 
 
 class Reg(IntEnum, shape=5):
@@ -67,7 +81,7 @@ class OpImmFunct(Enum, shape=3):
 #   14-12: funct3
 #    11-7: rd
 #     6-0: opcode
-class InsIS(Struct):
+class InsI(Struct):
     opcode: Opcode
     rd: Reg
     funct: OpImmFunct
@@ -75,8 +89,51 @@ class InsIS(Struct):
     imm: unsigned(12)
 
 
-def InsI(opcode, funct, rs1, rd, imm):
-    return InsIS.const(locals()).as_value().value
+def value(struct, **kwargs):
+    return struct.const(kwargs).as_value().value
+
+
+# TODO: bounds checking on imm arguments
+
+for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
+
+    def f(op, rs1, rd, imm):
+        if imm > 0:
+            assert 0 < imm <= 0b111111111111, f"imm is {imm}"
+        elif imm < 0:
+            assert 0 < -imm <= 0b111111111111, f"imm is {imm}"  # XXX check
+
+        return value(
+            InsI,
+            opcode=Opcode.OP_IMM,
+            funct=OpImmFunct[op.upper()],
+            rs1=rs1,
+            rd=rd,
+            imm=imm,
+        )
+
+    add_insn(op, f)
+
+for op in ["slli", "srli", "srai"]:
+
+    def f(op, rs1, rd, shamt):
+        assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
+
+        funct, imm11_5 = {
+            "slli": ("SLLI", 0),
+            "srli": ("SRI", 0b0000000),
+            "srai": ("SRI", 0b0100000),
+        }[op]
+        return value(
+            InsI,
+            opcode=Opcode.OP_IMM,
+            funct=OpImmFunct[funct],
+            rs1=rs1,
+            rd=rd,
+            imm=(imm11_5 << 5) | shamt,
+        )
+
+    add_insn(op, f)
 
 
 # S:

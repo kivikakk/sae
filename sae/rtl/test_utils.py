@@ -1,10 +1,11 @@
 from contextlib import contextmanager
-from functools import partialmethod
+from functools import wraps
 
 from amaranth import Memory
 from amaranth.sim import Simulator, Tick
 
-from . import InsI, Opcode, OpImmFunct, Reg, State, Top
+from . import State, Top
+from .rv32 import INSNS, Reg
 
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
@@ -84,8 +85,8 @@ class InsnTestHelpers:
             self.assertRegValue(v, result)
 
     def assertRegValue(self, expected, actual):
-        if expected is Unwritten:
-            self.assertIs(actual, Unwritten)
+        if expected is Unwritten or actual is Unwritten:
+            self.assertIs(expected, actual)
             return
         if expected < 0:
             expected += 2**32  # XLEN
@@ -105,46 +106,13 @@ class InsnTestHelpers:
                 raise NotImplementedError(r)
 
     @classmethod
-    def add_insn(cls, op, f):
-        name = op[0].upper() + op[1:]
-        f.__name__ = name
-        setattr(cls, name, partialmethod(f, op))
+    def add_insn(cls, name, f):
+        @wraps(f)
+        def wrapped(self, *args, **kwargs):
+            self.__append(f(*args, **kwargs))
+
+        setattr(cls, name, wrapped)
 
 
-# TODO: bounds checking on imm arguments
-
-for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
-
-    def f(self, op, rs1, rd, imm):
-        if imm > 0:
-            assert 0 < imm <= 0b111111111111, f"imm is {imm}"
-        elif imm < 0:
-            assert 0 < -imm <= 0b111111111111, f"imm is {imm}"  # XXX check
-
-        self._InsnTestHelpers__append(
-            InsI(Opcode.OP_IMM, OpImmFunct[op.upper()], rs1, rd, imm)
-        )
-
-    InsnTestHelpers.add_insn(op, f)
-
-for op in ["slli", "srli", "srai"]:
-
-    def f(self, op, rs1, rd, shamt):
-        assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
-
-        funct, imm11_5 = {
-            "slli": ("SLLI", 0),
-            "srli": ("SRI", 0b0000000),
-            "srai": ("SRI", 0b0100000),
-        }[op]
-        self._InsnTestHelpers__append(
-            InsI(
-                Opcode.OP_IMM,
-                OpImmFunct[funct],
-                rs1,
-                rd,
-                (imm11_5 << 5) | shamt,
-            )
-        )
-
-    InsnTestHelpers.add_insn(op, f)
+for name, f in INSNS.items():
+    InsnTestHelpers.add_insn(name, f)
