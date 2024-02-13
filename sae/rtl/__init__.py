@@ -77,7 +77,7 @@ class Top(Elaboratable):
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
             with m.State("fetch.init"):
-                m.d.sync += self.sysmem_rd.addr.eq(self.pc)
+                m.d.sync += self.sysmem_rd.addr.eq(self.pc >> 2)
                 m.next = "fetch.delay"
 
             with m.State("fetch.delay"):
@@ -152,7 +152,13 @@ class Top(Elaboratable):
                             m.d.sync += self.xreg[v_u.rd].eq(v_u.imm << 12)
                             if self.track_reg_written:
                                 m.d.sync += self.xreg_written[v_u.rd].eq(1)
-                    m.d.sync += self.pc.eq(self.pc + 1)
+                        with m.Case(Opcode.AUIPC):
+                            m.d.sync += self.xreg[v_u.rd].eq(
+                                (v_u.imm << 12) | self.pc[:12]
+                            )
+                            if self.track_reg_written:
+                                m.d.sync += self.xreg_written[v_u.rd].eq(1)
+                    m.d.sync += self.pc.eq(self.pc + 4)
                     m.next = "fetch.init"
 
             with m.State("faulted"):

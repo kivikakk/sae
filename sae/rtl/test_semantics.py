@@ -145,3 +145,11 @@ class TestInsns(InsnTestHelpers, unittest.TestCase):
         with self.Run():
             self.Lui(Reg.X1, 0xFFFFF)
         self.assertRegs(x1=0xFFFFF000)
+
+    def test_auipc(self):
+        with self.Run():
+            self.Addi(Reg.X0, Reg.X0, 0)  # NOP
+            self.Addi(Reg.X0, Reg.X0, 0)
+            self.Addi(Reg.X0, Reg.X0, 0)
+            self.Auipc(Reg.X1, 0x12345)
+        self.assertRegs(x1=0x1234500C)  # I think.
