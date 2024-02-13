@@ -20,11 +20,11 @@
     "amaranth": {
       "flake": false,
       "locked": {
-        "lastModified": 1706114722,
-        "narHash": "sha256-p3PUoWETgTlCQweF1nPYP44CYF/P2RAuZNoeVmRD51M=",
+        "lastModified": 1707513334,
+        "narHash": "sha256-nIl7ffzw0vXeZojXfQ0IsmqQS0i9WZudJ90C4/FG68c=",
         "owner": "amaranth-lang",
         "repo": "amaranth",
-        "rev": "65d77f03fe7a75182b4263cd11cc1251b393dad7",
+        "rev": "05ac36751a04c6c574f65702a4a441ed865bf69f",
         "type": "github"
       },
       "original": {
@@ -117,11 +117,11 @@
         "z3": "z3"
       },
       "locked": {
-        "lastModified": 1705733888,
-        "narHash": "sha256-TXiJwh8mv8mCGyarnD5WSmyNham5OtvDszGUuE7bjus=",
+        "lastModified": 1707548722,
+        "narHash": "sha256-vvAsxr4OVNCyA0tYFHwzT9MASGDK4SjoHrkKeQligzU=",
         "ref": "refs/heads/main",
-        "rev": "92c2a98fe7753921d8636f677af104801f45b3dd",
-        "revCount": 114,
+        "rev": "45891071d66e1c302465668c06f8c92f281c65d3",
+        "revCount": 116,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/hdx"
       },
@@ -166,11 +166,11 @@
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1706098335,
-        "narHash": "sha256-r3dWjT8P9/Ah5m5ul4WqIWD8muj5F+/gbCdjiNVBKmU=",
+        "lastModified": 1705641746,
+        "narHash": "sha256-D6c2aH8HQbWc7ZWSV0BUpFpd94ImFyCP8jFIsKQ4Slg=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "a77ab169a83a4175169d78684ddd2e54486ac651",
+        "rev": "d2003f2223cbb8cd95134e4a0541beea215c1073",
         "type": "github"
       },
       "original": {
@@ -195,11 +195,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1707544287,
-        "narHash": "sha256-iF0VRyVeyK5IaxZ9x54ryu4RIPbu/PLP9hghpV/eNIE=",
+        "lastModified": 1707548922,
+        "narHash": "sha256-j6FO9Xv74ikdTdT+JwR6L89vtyAGO7Ct7dyjhU3xgnI=",
         "ref": "refs/heads/main",
-        "rev": "75d3ba7ce035ac8ccdd4b14e3956c770eed08fe2",
-        "revCount": 13,
+        "rev": "082b91a171b577409b32b942f59861da431237b3",
+        "revCount": 14,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/rainhdx"
       },
@@ -291,11 +291,11 @@
     "yosys": {
       "flake": false,
       "locked": {
-        "lastModified": 1705709767,
-        "narHash": "sha256-Bq5uWzsi/Na5s7KGbTTaSNwpRZvZP+/Zxj7OFtdCRpw=",
+        "lastModified": 1707524113,
+        "narHash": "sha256-eFKoFaO+0kDpHJXHMzvCR80kT1bffXW7lPyfeTK6yWw=",
         "owner": "YosysHQ",
         "repo": "yosys",
-        "rev": "8649e306682e44b7f3e1b869d1043041db00b13e",
+        "rev": "31dbd915ca27d095b59a33e55cb4e5c771945ba4",
         "type": "github"
       },
       "original": {
