@@ -5,7 +5,7 @@ from amaranth.hdl.mem import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
-from .rv32 import InsI, InsU, Opcode, OpImmFunct, Reg
+from .rv32 import InsI, InsR, InsU, Opcode, OpImmFunct, OpRegFunct, Reg
 
 __all__ = [
     "Top",
@@ -92,6 +92,7 @@ class Top(Elaboratable):
                 with m.Else():
                     v_i = InsI(self.sysmem_rd.data)
                     v_u = InsU(self.sysmem_rd.data)
+                    v_r = InsR(self.sysmem_rd.data)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
@@ -101,61 +102,51 @@ class Top(Elaboratable):
                         with m.Case(Opcode.OP_IMM):
                             with m.Switch(v_i.funct):
                                 with m.Case(OpImmFunct.ADDI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] + v_sxi
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] + v_sxi
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.SLTI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] < v_sxi
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] < v_sxi
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.SLTIU):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] < v_sxi.as_unsigned()
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] < v_sxi.as_unsigned()
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.ANDI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] & v_sxi
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] & v_sxi
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.ORI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] | v_sxi
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] | v_sxi
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.XORI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] ^ v_sxi
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] ^ v_sxi
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.SLLI):
-                                    m.d.sync += self.xreg[v_i.rd].eq(
-                                        self.xreg[v_i.rs1] << v_i.imm[:5]
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] << v_i.imm[:5]
                                     )
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
                                 with m.Case(OpImmFunct.SRI):
                                     rs1 = self.xreg[v_i.rs1]
                                     rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
-                                    m.d.sync += self.xreg[v_i.rd].eq(rs1 >> v_i.imm[:5])
-                                    if self.track_reg_written:
-                                        m.d.sync += self.xreg_written[v_i.rd].eq(1)
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, rs1 >> v_i.imm[:5]
+                                    )
+                        with m.Case(Opcode.OP):
+                            with m.Switch(v_r.funct3):
+                                with m.Case(OpRegFunct.ADD):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] + self.xreg[v_r.rs2]
+                                    )
                         with m.Case(Opcode.LUI):
-                            m.d.sync += self.xreg[v_u.rd].eq(v_u.imm << 12)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v_u.rd].eq(1)
+                            m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                         with m.Case(Opcode.AUIPC):
-                            m.d.sync += self.xreg[v_u.rd].eq((v_u.imm << 12) + self.pc)
-                            if self.track_reg_written:
-                                m.d.sync += self.xreg_written[v_u.rd].eq(1)
+                            m.d.sync += self.write_xreg(
+                                v_u.rd, (v_u.imm << 12) + self.pc
+                            )
                     m.d.sync += self.pc.eq(self.pc + 4)
                     m.next = "fetch.init"
 
@@ -165,3 +156,9 @@ class Top(Elaboratable):
         m.d.sync += self.xreg[0].eq(0)
 
         return m
+
+    def write_xreg(self, xn, value):
+        assigns = [self.xreg[xn].eq(value)]
+        if self.track_reg_written:
+            assigns += [self.xreg_written[xn].eq(1)]
+        return assigns

@@ -4,7 +4,7 @@ from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import Enum, IntEnum
 
-__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "InsI", "InsU", "InsR"]
+__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "OpRegFunct", "InsI", "InsU", "InsR"]
 
 INSNS = {}
 
@@ -65,7 +65,7 @@ class OpImmFunct(Enum, shape=3):
     SRI = 0b101
 
 
-class OpRegFunct(Enum, shape=10):
+class OpRegFunct(IntEnum, shape=10):
     ADD = 0b000
     SLT = 0b010
     SLTU = 0b011
