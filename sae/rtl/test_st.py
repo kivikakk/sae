@@ -17,8 +17,8 @@ class ParserState(Enum):
     TestBody = 1
 
 
-RE_EMPTY = re.compile(r"\A\s* (?:\#.*)? \Z", re.VERBOSE)
-RE_TEST_START = re.compile(r"\A (\w+): \s*\Z", re.VERBOSE)
+RE_EMPTY = re.compile(r"\A\s* (?:;.*)? \Z", re.VERBOSE)
+RE_TEST_START = re.compile(r"\A (\w+): \s* (?:;.*)? \Z", re.VERBOSE)
 RE_TEST_PRAGMAEQ = re.compile(
     r"""
     \A\s* \.(\w+)
@@ -29,7 +29,7 @@ RE_TEST_PRAGMAEQ = re.compile(
         (?: \s*,\s* (?:\w+) \s*=\s* (?:\w+) )*
       )
     )?
-    \s*\Z
+    \s* (?:;.*)? \Z
 """,
     re.VERBOSE,
 )
@@ -45,7 +45,7 @@ RE_TEST_OP = re.compile(
         (?: \s*,\s* (?:\w+) )*
       )
     )?
-    \s*\Z
+    \s* (?:;.*)? \Z
 """,
     re.VERBOSE,
 )
@@ -116,8 +116,9 @@ class StParser:
                 if groups := RE_TEST_PRAGMAEQ.match(line):
                     kind = groups[1]
                     pairs = {}
-                    for k, v in RE_TEST_PRAGMAEQ_PAIR.findall(groups[2]):
-                        pairs[k] = int(v)
+                    if groups[2] is not None:
+                        for k, v in RE_TEST_PRAGMAEQ_PAIR.findall(groups[2]):
+                            pairs[k] = int(v, 0)
                     self.test_body.append(
                         PragmaEq(kind, pairs, line=line, lineno=self.lineno)
                     )
@@ -193,6 +194,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
     def translate_arg(cls, arg, f):
         if arg[0] == "x":
             return Reg[f"X{arg[1:]}"]
+        return int(arg, 0)
 
     @translate_arg.register(list)
     def translate_arg_list(cls, args, f):
