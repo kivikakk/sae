@@ -59,9 +59,8 @@ class InsnTestHelpers:
 
     @contextmanager
     def Run(self, **regs):
-        self.body = []
+        print(f"{self._testMethodName}:")
         yield
-        self.run_body(regs)
 
     def run_body(self, regs):
         top = Top(
@@ -74,8 +73,8 @@ class InsnTestHelpers:
         self.__asserted = set(["pc"])
 
     def __append(self, *insns):
-        assert self.body is not None
-        self.body.extend(insns)
+        for insn in insns:
+            print(insn)
 
     def assertReg(self, xr, v):
         rn = f"x{int(xr)}"
@@ -99,17 +98,22 @@ class InsnTestHelpers:
         )
 
     def assertRegs(self, **regs):
-        if "rest" not in regs:
-            regs["rest"] = Unwritten
+        print("\t.assert", end="")
+        first = True
         for r, v in regs.items():
             if r[0] == "x":
-                self.assertReg(Reg[f"X{r[1:]}"], v)
-            elif r == "rest":
-                self.assertRegRest(v)
+                c = " " if first else ", "
+                first = False
+                print(f"{c}{r}={v}", end="")
             else:
                 raise NotImplementedError(r)
+        print()
 
     for name, f in INSNS.items():
         locals()[name] = partialmethod(
-            lambda self, f, *args, **kwargs: self.__append(f(*args, **kwargs)), f
+            (
+                lambda name: lambda self, f, *args, **kwargs: print(
+                    f'\t{name.lower()} {", ".join(hex(arg) if isinstance(arg, int) else str(arg) for arg in args)}'.rstrip()
+                )
+            )(name)
         )
