@@ -198,16 +198,6 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
 
     @translate_arg.register(list)
     def translate_arg_list(cls, args, f):
-        ps = inspect.signature(f).parameters
-        if "rd" in ps:
-            # .st always puts rd first.
-            rd = args.pop(0)
-            for i, (pname, pparam) in enumerate(ps.items()):
-                if pname == "rd":
-                    args.insert(i, rd)
-                    break
-            else:
-                assert False, "we tested this"
         return [cls.translate_arg(arg, f) for arg in args]
 
     def run_st(self, body):

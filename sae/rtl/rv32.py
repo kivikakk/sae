@@ -96,7 +96,7 @@ class InsR(Struct):
 
 for op in ["add", "slt", "sltu", "and", "or", "xor", "sll", "srl", "sub", "sra"]:
 
-    def f(op, rs1, rs2, rd):
+    def f(op, rd, rs1, rs2):
         funct = OpRegFunct[op.upper()]
         return value(
             InsR,
@@ -129,7 +129,7 @@ class InsI(Struct):
 
 for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 
-    def f(op, rs1, rd, imm):
+    def f(op, rd, rs1, imm):
         if imm > 0:
             assert 0 < imm <= 2**12 - 1, f"imm is {imm}"
         elif imm < 0:
@@ -148,7 +148,7 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 
 for op in ["slli", "srli", "srai"]:
 
-    def f(op, rs1, rd, shamt):
+    def f(op, rd, rs1, shamt):
         assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
 
         funct, imm11_5 = {
