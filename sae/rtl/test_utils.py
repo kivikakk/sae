@@ -54,32 +54,36 @@ Unwritten = UnwrittenClass()
 class InsnTestHelpers:
     def __init__(self, *args):
         super().__init__(*args)
-        self.__body = None
+        self.body = None
+        self.results = None
 
     @contextmanager
     def Run(self, **regs):
-        self.__body = []
+        self.body = []
         yield
+        self.run_body(regs)
+
+    def run_body(self, regs):
         top = Top(
-            sysmem=Memory(width=32, depth=len(self.__body) + 1, init=self.__body + [0]),
+            sysmem=Memory(width=32, depth=len(self.body) + 1, init=self.body + [0]),
             reg_inits=regs,
             track_reg_written=True,
         )
-        self.__results = run_until_fault(top)
-        self.__body = None
-        self.__asserted = set(["pc"])  # don't assume "rest" includes pc
+        self.results = run_until_fault(top)
+        self.body = None
+        self.__asserted = set(["pc"])
 
     def __append(self, *insns):
-        assert self.__body is not None
-        self.__body.extend(insns)
+        assert self.body is not None
+        self.body.extend(insns)
 
-    def assertReg(self, r, v):
-        rn = f"x{int(r)}"
+    def assertReg(self, xr, v):
+        rn = f"x{int(xr)}"
         self.__asserted.add(rn)
-        self.assertRegValue(v, self.__results.get(rn, Unwritten))
+        self.assertRegValue(v, self.results.get(rn, Unwritten))
 
     def assertRegRest(self, v):
-        for name, result in self.__results.items():
+        for name, result in self.results.items():
             if name in self.__asserted:
                 continue
             self.assertRegValue(v, result)

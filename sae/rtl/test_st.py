@@ -1,10 +1,15 @@
+import inspect
 import re
 import unittest
 from contextlib import contextmanager
 from enum import Enum
-from functools import partialmethod, singledispatchmethod
+from functools import singledispatchmethod
 from pathlib import Path
 from typing import Optional
+
+from . import Top
+from .rv32 import INSNS, Reg
+from .test_utils import InsnTestHelpers, Unwritten
 
 
 class ParserState(Enum):
@@ -171,7 +176,7 @@ class StErrorHandler:
             raise StError(filename, seh.lineno, seh.line) from e
 
 
-class StTestCase(unittest.TestCase):
+class StTestCase(InsnTestHelpers, unittest.TestCase):
     def __init_subclass__(cls):
         super().__init_subclass__()
 
@@ -183,16 +188,53 @@ class StTestCase(unittest.TestCase):
             name = f"test_st_{name}"
             setattr(cls, name, lambda self, body=body: cls.run_st(self, body))
 
+    @singledispatchmethod
+    @classmethod
+    def translate_arg(cls, arg, f):
+        if arg[0] == "x":
+            return Reg[f"X{arg[1:]}"]
+
+    @translate_arg.register(list)
+    def translate_arg_list(cls, args, f):
+        ps = inspect.signature(f).parameters
+        if "rd" in ps:
+            # .st always puts rd first.
+            rd = args.pop(0)
+            for i, (pname, pparam) in enumerate(ps.items()):
+                if pname == "rd":
+                    args.insert(i, rd)
+                    break
+            else:
+                assert False, "we tested this"
+        return [cls.translate_arg(arg, f) for arg in args]
+
     def run_st(self, body):
         with StErrorHandler.wrap_with_context(self.filename) as seh:
             for line in body:
                 seh.notify(line)
                 match line:
-                    case PragmaEq(kind="init"):
-                        print("init!!")
+                    case PragmaEq(kind="init", pairs=pairs):
+                        self.__fish()
+                        self.__reg_inits = pairs
+                        self.body = []
+                        self.results = None
+                    case Op(opcode=opcode, args=args):
+                        insn = INSNS[opcode[0].upper() + opcode[1:]]
+                        args = self.translate_arg(args, insn)
+                        self.body.append(insn(*args))
+                    case PragmaEq(kind="assert", pairs=pairs):
+                        if self.results is None:
+                            self.run_body(self.__reg_inits)
+                        for k, v in pairs.items():
+                            assert k[0] == "x"
+                            self.assertReg(int(k[1:]), int(v))
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")
+
+    def __fish(self):
+        if self.results is not None:
+            self.assertRegRest(Unwritten)
 
 
 class TestSemanticsSt(StTestCase):
