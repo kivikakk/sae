@@ -57,11 +57,6 @@ class InsnTestHelpers:
         self.body = None
         self.results = None
 
-    @contextmanager
-    def Run(self, **regs):
-        print(f"{self._testMethodName}:")
-        yield
-
     def run_body(self, regs):
         top = Top(
             sysmem=Memory(width=32, depth=len(self.body) + 1, init=self.body + [0]),
@@ -71,10 +66,6 @@ class InsnTestHelpers:
         self.results = run_until_fault(top)
         self.body = None
         self.__asserted = set(["pc"])
-
-    def __append(self, *insns):
-        for insn in insns:
-            print(insn)
 
     def assertReg(self, xr, v):
         rn = f"x{int(xr)}"
@@ -95,25 +86,4 @@ class InsnTestHelpers:
             expected += 2**32  # XLEN
         self.assertEqual(
             expected, actual, f"expected 0x{expected:X}, actual 0x{actual:X}"
-        )
-
-    def assertRegs(self, **regs):
-        print("\t.assert", end="")
-        first = True
-        for r, v in regs.items():
-            if r[0] == "x":
-                c = " " if first else ", "
-                first = False
-                print(f"{c}{r}={v}", end="")
-            else:
-                raise NotImplementedError(r)
-        print()
-
-    for name, f in INSNS.items():
-        locals()[name] = partialmethod(
-            (
-                lambda name: lambda self, f, *args, **kwargs: print(
-                    f'\t{name.lower()} {", ".join(hex(arg) if isinstance(arg, int) else str(arg) for arg in args)}'.rstrip()
-                )
-            )(name)
         )

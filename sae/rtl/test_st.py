@@ -26,14 +26,14 @@ RE_TEST_PRAGMAEQ = re.compile(
       \s+
       (
         (?:\w+) \s*=\s* (?:-?\s*\w+)
-        (?: \s*,\s* (?:\w+) \s*=\s* (?:\w+) )*
+        (?: \s*,\s* (?:\w+) \s*=\s* (?:-?\s*\w+) )*
       )
     )?
     \s* (?:;.*)? \Z
 """,
     re.VERBOSE,
 )
-RE_TEST_PRAGMAEQ_PAIR = re.compile(r" (\w+) \s*=\s* (-?\s*\w+) ", re.VERBOSE)
+RE_TEST_PRAGMAEQ_PAIR = re.compile(r" (\w+) \s*=\s* ((?:-\s*)?\w+) ", re.VERBOSE)
 RE_TEST_OP = re.compile(
     r"""
     \A\s*
@@ -42,14 +42,14 @@ RE_TEST_OP = re.compile(
       \s+
       (
         (?:\w+)
-        (?: \s*,\s* (?:\w+) )*
+        (?: \s*,\s* (?:-?\s*\w+) )*
       )
     )?
     \s* (?:;.*)? \Z
 """,
     re.VERBOSE,
 )
-RE_TEST_OP_ARG = re.compile(r" (\w+) ", re.VERBOSE)
+RE_TEST_OP_ARG = re.compile(r" ((?:-\s*)?\w+) ", re.VERBOSE)
 
 
 class PragmaEq:
