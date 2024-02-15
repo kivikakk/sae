@@ -172,22 +172,12 @@ class StError(RuntimeError):
         return f"{self.filename}:{self.lineno}: {self.line}"
 
 
-class StErrorHandler:
-    lineno: int
-    line: str
-
-    def notify(self, line):
-        self.lineno = line.lineno
-        self.line = line.line
-
-    @classmethod
-    @contextmanager
-    def wrap_with_context(cls, filename):
-        seh = cls()
-        try:
-            yield seh
-        except Exception as e:
-            raise StError(filename, seh.lineno, seh.line) from e
+@contextmanager
+def annotate_exceptions(filename, line):
+    try:
+        yield
+    except Exception as e:
+        raise StError(filename, line.lineno, line.line) from e
 
 
 class StTestCase(InsnTestHelpers, unittest.TestCase):
@@ -204,19 +194,20 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
 
     @singledispatchmethod
     @classmethod
-    def translate_arg(cls, arg, f):
+    def translate_arg(cls, arg):
         if arg[0] == "x":
             return Reg[f"X{arg[1:]}"]
+        elif arg == "ra":
+            return Reg.X1
         return int(arg, 0)
 
     @translate_arg.register(list)
-    def translate_arg_list(cls, args, f):
-        return [cls.translate_arg(arg, f) for arg in args]
+    def translate_arg_list(cls, args):
+        return [cls.translate_arg(arg) for arg in args]
 
     def run_st(self, body):
-        with StErrorHandler.wrap_with_context(self.filename) as seh:
-            for line in body:
-                seh.notify(line)
+        for line in body:
+            with annotate_exceptions(self.filename, line):
                 match line:
                     case Pragma(kind="init", kwargs=kwargs):
                         self.__fish()
@@ -225,7 +216,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         self.results = None
                     case Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
-                        args = self.translate_arg(args, insn)
+                        args = self.translate_arg(args)
                         ops = insn(*args)
                         if not isinstance(ops, list):
                             ops = [ops]
