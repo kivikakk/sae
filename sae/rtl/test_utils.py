@@ -28,7 +28,11 @@ def run_until_fault(top):
                 print(f"pc={pc:08x}  ", end="")
                 for i in range(1, 6):
                     print(f"  x{i}={(yield top.xreg[i]):08x}", end="")
-                print()
+                print("    mem=", end="")
+                for i in range(4):
+                    v = yield top.sysmem[i]
+                    print(f"{v:0>8x} ", end="")
+                print("...")
 
         results["pc"] = yield top.pc
         for i in range(1, 32):

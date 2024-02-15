@@ -472,3 +472,9 @@ test_bgeu:
     .word 0
     li x2, 0xafafafaf
     .assert x2=0xafafafaf
+
+test_load_store:
+    .init x1=0x0, x2=0x12345678
+    sw x1, x2, 0
+    lw x3, x1, 0
+    .assert x3=0x12345678

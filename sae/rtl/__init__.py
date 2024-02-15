@@ -5,8 +5,8 @@ from amaranth.hdl import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
-from .rv32 import (InsB, InsI, InsJ, InsR, InsU, OpBranchFunct, Opcode,
-                   OpImmFunct, OpRegFunct, Reg)
+from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
+                   OpImmFunct, OpLoadFunct, OpRegFunct, OpStoreFunct, Reg)
 
 __all__ = [
     "Top",
@@ -14,9 +14,15 @@ __all__ = [
 ]
 
 
-class State(IntEnum):
+class State(IntEnum, shape=1):
     RUNNING = 0
     FAULTED = 1
+
+
+class LoadSize(IntEnum, shape=2):
+    B = 0
+    H = 1
+    W = 2
 
 
 class Top(Elaboratable):
@@ -34,6 +40,9 @@ class Top(Elaboratable):
     xreg: Array[Signal]
     xreg_written: Optional[Array[Signal]]
     pc: Signal
+
+    ls_reg: Signal
+    ls_size: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or Memory(
@@ -58,6 +67,9 @@ class Top(Elaboratable):
 
         self.pc = Signal(self.XLEN)
 
+        self.ls_reg = Signal(range(32))
+        self.ls_size = Signal(LoadSize)
+
     def reg_reset(self, xn):
         if xn == 0:
             return 0
@@ -78,7 +90,10 @@ class Top(Elaboratable):
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
             with m.State("fetch.init"):
-                m.d.sync += self.sysmem_rd.addr.eq(self.pc >> 2)
+                m.d.sync += [
+                    self.sysmem_rd.addr.eq(self.pc >> 2),
+                    self.sysmem_wr.en.eq(0),
+                ]
                 m.next = "fetch.delay"
 
                 with m.If(self.pc[:2].any()):
@@ -99,18 +114,32 @@ class Top(Elaboratable):
                     v_r = InsR(self.sysmem_rd.data)
                     v_j = InsJ(self.sysmem_rd.data)
                     v_b = InsB(self.sysmem_rd.data)
+                    v_s = InsS(self.sysmem_rd.data)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
                     m.d.comb += v_sxi.eq(v_i.imm.as_signed())
 
-                    # set pc before processing opcode so it can be overridden,
-                    # set x0 after so it remains zero (lol).
+                    # set pc/next before processing opcode so they can be
+                    # overridden, set x0 after so it remains zero (lol).
+                    m.next = "fetch.init"
                     m.d.sync += self.pc.eq(self.pc + 4)
 
                     with m.Switch(v_i.opcode):
+                        with m.Case(Opcode.LOAD):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(OpLoadFunct.LW):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_rd.addr.eq(
+                                            self.xreg[v_i.rs1] + v_i.imm.as_signed()
+                                        ),
+                                        self.ls_reg.eq(v_i.rd),
+                                        self.ls_size.eq(4),
+                                    ]
+                                    m.next = "lw.delay"
                         with m.Case(Opcode.OP_IMM):
-                            with m.Switch(v_i.funct):
+                            with m.Switch(v_i.funct3):
                                 with m.Case(OpImmFunct.ADDI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] + v_sxi
@@ -199,7 +228,24 @@ class Top(Elaboratable):
                             m.d.sync += self.write_xreg(
                                 v_u.rd, (v_u.imm << 12) + self.pc
                             )
+                        with m.Case(Opcode.STORE):
+                            imm = Cat(v_s.imm4_0, v_s.imm11_5)
+                            with m.Switch(v_s.funct3):
+                                with m.Case(OpStoreFunct.SW):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_wr.addr.eq(
+                                            self.xreg[v_s.rs1] + imm.as_signed()
+                                        ),
+                                        self.ls_reg.eq(v_s.rs2),
+                                        self.ls_size.eq(4),
+                                    ]
+                                    m.next = "sw.delay"
                         with m.Case(Opcode.BRANCH):
+                            # TODO: we're meant to raise
+                            # instruction-address-misaligned if the target
+                            # address isn't 4-byte aligned (modulo RVC) **iff**
+                            # the condition evaluates to true.
                             imm = Cat(  # meow :3
                                 C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
                             ).as_signed()
@@ -251,7 +297,30 @@ class Top(Elaboratable):
                                 ),
                             ]
 
-                    m.next = "fetch.init"
+            with m.State("lw.delay"):
+                m.next = "lw.resolve"
+
+            with m.State("lw.resolve"):
+                # TODO: honour ls_size
+                # TODO: l[hb]u?
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.write_xreg(self.ls_reg, self.sysmem_rd.data),
+                ]
+                m.next = "fetch.init"
+
+            with m.State("sw.delay"):
+                m.next = "sw.resolve"
+
+            with m.State("sw.resolve"):
+                # TODO: honour ls_size
+                # TODO: s[hb]
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.sysmem_wr.data.eq(self.xreg[self.ls_reg]),
+                    self.sysmem_wr.en.eq(1),
+                ]
+                m.next = "fetch.init"
 
             with m.State("faulted"):
                 m.d.comb += self.state.eq(State.FAULTED)

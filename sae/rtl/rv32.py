@@ -11,10 +11,13 @@ __all__ = [
     "OpImmFunct",
     "OpBranchFunct",
     "OpRegFunct",
+    "OpLoadFunct",
+    "OpStoreFunct",
     "InsI",
     "InsU",
     "InsR",
     "InsJ",
+    "InsS",
     "InsB",
 ]
 
@@ -97,6 +100,20 @@ class OpBranchFunct(IntEnum, shape=3):
     BGEU = 0b111
 
 
+class OpLoadFunct(IntEnum, shape=3):
+    LB = 0b000
+    LH = 0b001
+    LW = 0b010
+    LBU = 0b100
+    LHU = 0b101
+
+
+class OpStoreFunct(IntEnum, shape=3):
+    SB = 0b000
+    SH = 0b001
+    SW = 0b010
+
+
 # R:
 #   31-25: funct7
 #   24-20: rs2
@@ -146,14 +163,14 @@ add_insn("snez", lambda op, rd, rs: Sltu(rd, Reg.X0, rs))
 class InsI(Struct):
     opcode: Opcode
     rd: Reg
-    funct: OpImmFunct
+    funct3: OpImmFunct
     rs1: Reg
     imm: unsigned(12)
 
 
 # TODO: bounds checking on imm arguments
 
-for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr"]:
+for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr", "load"]:
 
     def f(op, rd, rs1, imm):
         if imm > 0:
@@ -161,13 +178,28 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr"]:
         elif imm < 0:
             assert 0 < -imm <= 2**12 - 1, f"imm is {imm}"  # XXX check
 
-        if op == "jalr":
-            opcode = Opcode.JALR
-            funct = 0
-        else:
-            opcode = Opcode.OP_IMM
-            funct = OpImmFunct[op.upper()]
-        return value(InsI, opcode=opcode, funct=funct, rs1=rs1, rd=rd, imm=imm)
+        match op:
+            case "jalr":
+                opcode = Opcode.JALR
+                funct3 = 0
+            case _:
+                opcode = Opcode.OP_IMM
+                funct3 = OpImmFunct[op.upper()]
+        return value(InsI, opcode=opcode, funct3=funct3, rs1=rs1, rd=rd, imm=imm)
+
+    add_insn(op, f)
+
+for op in ["lw", "lh", "lhu", "lb", "lbu"]:
+
+    def f(op, rd, rs1, imm):
+        return value(
+            InsI,
+            opcode=Opcode.LOAD,
+            rd=rd,
+            funct3=OpLoadFunct[op.upper()],
+            rs1=rs1,
+            imm=imm,
+        )
 
     add_insn(op, f)
 
@@ -199,14 +231,14 @@ for op in ["slli", "srli", "srai"]:
     def f(op, rd, rs1, shamt):
         assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
 
-        funct, imm11_5 = {
+        funct3, imm11_5 = {
             "srli": ("SRI", 0b0000000),
             "srai": ("SRI", 0b0100000),
         }.get(op, (op.upper(), 0))
         return value(
             InsI,
             opcode=Opcode.OP_IMM,
-            funct=OpImmFunct[funct],
+            funct3=OpImmFunct[funct3],
             rs1=rs1,
             rd=rd,
             imm=(imm11_5 << 5) | shamt,
@@ -222,6 +254,29 @@ for op in ["slli", "srli", "srai"]:
 #   14-12: funct3
 #    11-7: imm[4:0]
 #     6-0: opcode
+class InsS(Struct):
+    opcode: Opcode
+    imm4_0: unsigned(5)
+    funct3: unsigned(3)
+    rs1: Reg
+    rs2: Reg
+    imm11_5: unsigned(7)
+
+
+for op in ["sw", "sh", "sb"]:
+
+    def f(op, rs1, rs2, imm):
+        return value(
+            InsS,
+            opcode=Opcode.STORE,
+            imm4_0=imm & 0x1F,
+            funct3=OpStoreFunct[op.upper()],
+            rs1=rs1,
+            rs2=rs2,
+            imm11_5=(imm >> 5),
+        )
+
+    add_insn(op, f)
 
 
 # B:
