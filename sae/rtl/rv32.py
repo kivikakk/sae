@@ -142,7 +142,7 @@ class InsI(Struct):
 
 # TODO: bounds checking on imm arguments
 
-for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
+for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr"]:
 
     def f(op, rd, rs1, imm):
         if imm > 0:
@@ -150,14 +150,13 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
         elif imm < 0:
             assert 0 < -imm <= 2**12 - 1, f"imm is {imm}"  # XXX check
 
-        return value(
-            InsI,
-            opcode=Opcode.OP_IMM,
-            funct=OpImmFunct[op.upper()],
-            rs1=rs1,
-            rd=rd,
-            imm=imm,
-        )
+        if op == "jalr":
+            opcode = Opcode.JALR
+            funct = 0
+        else:
+            opcode = Opcode.OP_IMM
+            funct = OpImmFunct[op.upper()]
+        return value(InsI, opcode=opcode, funct=funct, rs1=rs1, rd=rd, imm=imm)
 
     add_insn(op, f)
 
@@ -165,6 +164,12 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 def li(op, rd, imm):
     if (imm & 0xFFF) == imm:
         return Addi(rd, Reg.X0, imm)
+    if imm & 0x800:
+        return [
+            Lui(rd, imm >> 12),
+            Addi(rd, rd, (imm & 0xFFF) >> 1),
+            Addi(rd, rd, (imm & 0xFFF) >> 1 + int(imm & 1)),
+        ]
     return [
         Lui(rd, imm >> 12),
         Addi(rd, rd, imm & 0xFFF),
@@ -275,3 +280,4 @@ def jal(op, rd, imm):
 
 
 add_insn("jal", jal)
+add_insn("j", lambda op, imm: Jal(Reg.X0, imm))

@@ -99,6 +99,8 @@ class Top(Elaboratable):
                     v_sxi = Signal(signed(32))
                     m.d.comb += v_sxi.eq(v_i.imm.as_signed())
 
+                    # set pc before processing opcode so it can be overridden,
+                    # set x0 after so it remains zero (lol).
                     m.d.sync += self.pc.eq(self.pc + 4)
 
                     with m.Switch(v_i.opcode):
@@ -192,6 +194,11 @@ class Top(Elaboratable):
                             m.d.sync += self.write_xreg(
                                 v_u.rd, (v_u.imm << 12) + self.pc
                             )
+                        with m.Case(Opcode.JALR):
+                            m.d.sync += [
+                                self.write_xreg(v_i.rd, self.pc + 4),
+                                self.pc.eq(self.xreg[v_i.rs1] + v_i.imm.as_signed()),
+                            ]
                         with m.Case(Opcode.JAL):
                             m.d.sync += [
                                 self.write_xreg(v_j.rd, self.pc + 4),

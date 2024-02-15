@@ -348,3 +348,18 @@ test_jal:
     jal x2, -8                  ; <  ---'   |
     li x4, 4                    ;       <---'
     .assert x1=4, x2=16, x3=8, x4=4
+
+    .init
+    j 4
+    .assert
+
+test_jalr:
+    .init
+    j 12                        ;  .
+    nop                         ;  |
+    jalr x3, x2, 4              ;  |  <-. --.
+    auipc x1, 0                 ; <     |   |
+    jalr x2, x1, -4             ; ------'   |
+    .word 0                     ;           |
+    li x4, 0xAAAA               ;       <---'
+    .assert x1=0xC, x2=0x14, x3=0x0C, x4=0xAAAA
