@@ -359,7 +359,7 @@ test_jalr:
     nop                         ;  |
     jalr x3, x2, 4              ;  |  <-. --.
     auipc x1, 0                 ; <     |   |
-    jalr x2, x1, -4             ; ------'   |
+    jalr x2, x1, -3             ; ------'   |
     .word 0                     ;           |
     li x4, 0xAAAA               ;       <---'
     .assert x1=0xC, x2=0x14, x3=0x0C, x4=0xAAAA

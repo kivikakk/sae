@@ -80,6 +80,9 @@ class Top(Elaboratable):
                 m.d.sync += self.sysmem_rd.addr.eq(self.pc >> 2)
                 m.next = "fetch.delay"
 
+                with m.If(self.pc[:2].any()):
+                    m.next = "faulted"
+
             with m.State("fetch.delay"):
                 m.next = "fetch.resolve"
 
@@ -197,7 +200,10 @@ class Top(Elaboratable):
                         with m.Case(Opcode.JALR):
                             m.d.sync += [
                                 self.write_xreg(v_i.rd, self.pc + 4),
-                                self.pc.eq(self.xreg[v_i.rs1] + v_i.imm.as_signed()),
+                                self.pc.eq(
+                                    (self.xreg[v_i.rs1] + v_i.imm.as_signed())
+                                    & 0xFFFFFFFE
+                                ),
                             ]
                         with m.Case(Opcode.JAL):
                             m.d.sync += [
