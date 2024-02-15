@@ -6,7 +6,7 @@ from amaranth.lib.enum import IntEnum
 
 from . import rv32
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
-                   OpImmFunct, OpLoadFunct, OpRegFunct, OpStoreFunct, Reg)
+                   OpImmFunct, OpLoadFunct, OpRegFunct, OpStoreFunct)
 
 __all__ = [
     "Top",

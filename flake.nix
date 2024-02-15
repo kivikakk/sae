@@ -22,6 +22,8 @@
       packages.default = rainhdx.buildRainProject {
         name = "sae";
         src = ./.;
+
+        nativeBuildInputs = [rainhdx.python.pkgs.funcparserlib];
       };
     });
 }

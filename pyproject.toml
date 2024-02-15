@@ -8,6 +8,7 @@ authors = [
 dependencies = [
     "amaranth >= 0.4.0dev0, < 0.6",
     "rain >= 0.1",
+    "funcparserlib >= 1.0.1",
 ]
 requires-python = ">=3.8"
 license = {text = "BSD-2-Clause"}
@@ -31,4 +32,8 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "rainhdx.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "funcparserlib.*"
 ignore_missing_imports = true

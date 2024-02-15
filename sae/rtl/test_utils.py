@@ -1,11 +1,7 @@
-from contextlib import contextmanager
-from functools import partialmethod
-
 from amaranth import Memory
 from amaranth.sim import Simulator, Tick
 
 from . import State, Top
-from .rv32 import INSNS, Reg
 
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 

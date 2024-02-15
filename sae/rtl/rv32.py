@@ -1,8 +1,8 @@
 from functools import partial
 
-from amaranth import unsigned
+from amaranth import Memory, unsigned
 from amaranth.lib.data import Struct
-from amaranth.lib.enum import Enum, IntEnum
+from amaranth.lib.enum import IntEnum
 
 __all__ = [
     "INSNS",
@@ -49,7 +49,7 @@ class Reg(IntEnum, shape=5):
         locals()[f"X{i}"] = i
 
 
-class Opcode(Enum, shape=7):
+class Opcode(IntEnum, shape=7):
     LOAD = 0b0000011
     LOAD_FP = 0b0000111
     MISC_MEM = 0b0001111
@@ -73,7 +73,7 @@ class Opcode(Enum, shape=7):
     SYSTEM = 0b1110011
 
 
-class OpImmFunct(Enum, shape=3):
+class OpImmFunct(IntEnum, shape=3):
     ADDI = 0b000
     SLTI = 0b010
     SLTIU = 0b011
