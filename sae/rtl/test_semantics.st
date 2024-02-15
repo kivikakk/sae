@@ -478,3 +478,10 @@ test_load_store:
     sw x1, x2, 0
     lw x3, x1, 0
     .assert x3=0x12345678
+
+    .init
+    lw x1, x0, 4                ; load *next* instruction
+    nop                         ; addi x0, x0, 0 = 0x00000013
+    sw x0, x1, 0
+    lw x2, x0, 0
+    .assert x1=0x13, x2=0x13
