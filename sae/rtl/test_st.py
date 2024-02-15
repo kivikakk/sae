@@ -124,7 +124,10 @@ class StParser:
                     )
                 elif groups := RE_TEST_OP.match(line):
                     opcode = groups[1]
-                    args = RE_TEST_OP_ARG.findall(groups[2])
+                    if groups[2] is not None:
+                        args = RE_TEST_OP_ARG.findall(groups[2])
+                    else:
+                        args = []
                     self.test_body.append(
                         Op(opcode, args, line=line, lineno=self.lineno)
                     )

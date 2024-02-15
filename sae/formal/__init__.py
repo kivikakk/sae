@@ -22,12 +22,9 @@ class Top(FormalHelper, Elaboratable):
     def elaborate(self, platform):
         m = Module()
 
-        sync_clk = ClockSignal("sync")
-        sync_rst = ResetSignal("sync")
-
-        sync_clk_past = self.past(m, sync_clk, cycles=1)
-        m.d.comb += Assume(sync_clk == ~sync_clk_past)
-        m.d.comb += Assume(~sync_rst)
+        sync_clk_past = self.past(m, self.sync_clk, cycles=1)
+        m.d.comb += Assume(self.sync_clk == ~sync_clk_past)
+        m.d.comb += Assume(~self.sync_rst)
 
         m.submodules.top = top = RtlTop()
 

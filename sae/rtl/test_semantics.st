@@ -137,9 +137,9 @@ test_lui:
 
 test_auipc:
     .init
-    addi x0, x0, 0              ; nop
-    addi x0, x0, 0
-    addi x0, x0, 0
+    nop
+    nop
+    nop
     auipc x1, 0x12345
     .assert x1=0x1234500C       ; I think.
 
@@ -152,3 +152,6 @@ test_add:
     add x2, x0, x1
     .assert x2=-1
 
+    .init x1=0xffffffff
+    add x1, x1, x1
+    .assert x1=0xfffffffe

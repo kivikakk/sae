@@ -220,3 +220,5 @@ for op in ["lui", "auipc"]:
 #   19-12: imm[19:12]
 #    11-7: rd
 #     6-0: opcode
+
+add_insn("nop", lambda op: Addi(Reg.X0, Reg.X0, 0))
