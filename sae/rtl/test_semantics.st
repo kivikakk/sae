@@ -325,3 +325,9 @@ test_sra:
     .assert x3=0xF5555555
 
 test_sub:
+    .init x1=3, x2=5
+    sub x3, x1, x2
+    sub x4, x2, x1
+    sub x5, x1, x0
+    sub x6, x0, x1
+    .assert x3=-2, x4=2, x5=3, x6=-3
