@@ -48,6 +48,15 @@ class Top(Elaboratable):
         self.reg_inits = reg_inits
         self.track_reg_written = track_reg_written
 
+        self.state = Signal(State)
+        self.xreg = Array(
+            Signal(self.XLEN, reset=self.reg_reset(xn)) for xn in range(32)
+        )
+        if self.track_reg_written:
+            self.xreg_written = Array(Signal() for _ in range(32))
+
+        self.pc = Signal(self.XLEN)
+
     def reg_reset(self, xn):
         if xn == 0:
             return 0
@@ -61,15 +70,6 @@ class Top(Elaboratable):
 
         self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
         self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port()
-
-        self.state = Signal(State)
-        self.xreg = Array(
-            Signal(self.XLEN, reset=self.reg_reset(xn)) for xn in range(32)
-        )
-        if self.track_reg_written:
-            self.xreg_written = Array(Signal() for _ in range(32))
-
-        self.pc = Signal(self.XLEN)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
