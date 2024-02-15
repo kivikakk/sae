@@ -9,11 +9,13 @@ __all__ = [
     "Reg",
     "Opcode",
     "OpImmFunct",
+    "OpBranchFunct",
     "OpRegFunct",
     "InsI",
     "InsU",
     "InsR",
     "InsJ",
+    "InsB",
 ]
 
 INSNS = {}
@@ -84,6 +86,15 @@ class OpRegFunct(IntEnum, shape=10):
     XOR = 0b100
     SLL = 0b001
     SR = 0b101
+
+
+class OpBranchFunct(IntEnum, shape=3):
+    BEQ = 0b000
+    BNE = 0b001
+    BLT = 0b100
+    BGE = 0b101
+    BLTU = 0b110
+    BGEU = 0b111
 
 
 # R:
@@ -168,7 +179,7 @@ def li(op, rd, imm):
         return [
             Lui(rd, imm >> 12),
             Addi(rd, rd, (imm & 0xFFF) >> 1),
-            Addi(rd, rd, (imm & 0xFFF) >> 1 + int(imm & 1)),
+            Addi(rd, rd, ((imm & 0xFFF) >> 1) + int(imm & 1)),
         ]
     return [
         Lui(rd, imm >> 12),
@@ -222,6 +233,34 @@ for op in ["slli", "srli", "srai"]:
 #    11-8: imm[4:1]
 #       7: imm[11]
 #     6-0: opcode
+class InsB(Struct):
+    opcode: Opcode
+    imm11: unsigned(1)
+    imm4_1: unsigned(4)
+    funct3: OpBranchFunct
+    rs1: Reg
+    rs2: Reg
+    imm10_5: unsigned(6)
+    imm12: unsigned(1)
+
+
+for op in ["beq", "bne", "blt", "bge", "bltu", "bgeu"]:
+
+    def f(op, rs1, rs2, imm):
+        assert not (imm & 0b1)
+        return value(
+            InsB,
+            opcode=Opcode.BRANCH,
+            imm11=(imm >> 11) & 0b1,
+            imm4_1=(imm >> 1) & 0xF,
+            funct3=OpBranchFunct[op.upper()],
+            rs1=rs1,
+            rs2=rs2,
+            imm10_5=(imm >> 5) & 0x3FF,
+            imm12=(imm >> 12) & 0b1,
+        )
+
+    add_insn(op, f)
 
 
 # U:

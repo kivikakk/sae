@@ -363,3 +363,31 @@ test_jalr:
     .word 0                     ;           |
     li x4, 0xAAAA               ;       <---'
     .assert x1=0xC, x2=0x14, x3=0x0C, x4=0xAAAA
+
+test_beq:
+    .init x1=1
+    beq x0, x1, 8
+    j 8
+    .word 0
+    li x2, 0x5555
+    .assert x2=0x5555
+
+    .init
+    beq x0, x0, 8
+    .word 0
+    li x1, 0xA5A5
+    .assert x1=0xA5A5
+
+test_bne:
+    .init x1=1
+    bne x0, x1, 8
+    .word 0
+    li x2, 0xABAB
+    .assert x2=0xABAB
+
+    .init
+    bne x0, x0, 8
+    j 8
+    .word 0
+    li x1, 0xABCD
+    .assert x1=0xABCD

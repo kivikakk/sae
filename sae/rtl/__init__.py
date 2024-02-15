@@ -5,7 +5,8 @@ from amaranth.hdl import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
-from .rv32 import InsI, InsJ, InsR, InsU, Opcode, OpImmFunct, OpRegFunct, Reg
+from .rv32 import (InsB, InsI, InsJ, InsR, InsU, OpBranchFunct, Opcode,
+                   OpImmFunct, OpRegFunct, Reg)
 
 __all__ = [
     "Top",
@@ -97,6 +98,7 @@ class Top(Elaboratable):
                     v_u = InsU(self.sysmem_rd.data)
                     v_r = InsR(self.sysmem_rd.data)
                     v_j = InsJ(self.sysmem_rd.data)
+                    v_b = InsB(self.sysmem_rd.data)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
@@ -197,6 +199,35 @@ class Top(Elaboratable):
                             m.d.sync += self.write_xreg(
                                 v_u.rd, (v_u.imm << 12) + self.pc
                             )
+                        with m.Case(Opcode.BRANCH):
+                            imm = Cat(  # meow :3
+                                C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
+                            ).as_signed()
+                            with m.Switch(v_b.funct3):
+                                with m.Case(OpBranchFunct.BEQ):
+                                    with m.If(self.xreg[v_b.rs1] == self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BNE):
+                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BLT):
+                                    with m.If(
+                                        self.xreg[v_b.rs1].as_signed()
+                                        < self.xreg[v_b.rs2].as_signed()
+                                    ):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BGE):
+                                    with m.If(
+                                        self.xreg[v_b.rs1].as_signed()
+                                        >= self.xreg[v_b.rs2].as_signed()
+                                    ):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BLTU):
+                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BGEU):
+                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
                         with m.Case(Opcode.JALR):
                             m.d.sync += [
                                 self.write_xreg(v_i.rd, self.pc + 4),
