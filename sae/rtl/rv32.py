@@ -35,7 +35,11 @@ def add_insn(op, f):
 
 
 def value(struct, **kwargs):
-    return struct.const(kwargs).as_value().value
+    v = struct.const(kwargs).as_value().value
+    return [
+        v & 0x0000FFFF,
+        (v >> 16) & 0xFFFF,
+    ]
 
 
 class Reg(IntEnum, shape=5):
@@ -209,13 +213,13 @@ def li(op, rd, imm):
         return Addi(rd, Reg.X0, imm)
     if imm & 0x800:
         return [
-            Lui(rd, imm >> 12),
-            Addi(rd, rd, (imm & 0xFFF) >> 1),
-            Addi(rd, rd, ((imm & 0xFFF) >> 1) + int(imm & 1)),
+            *Lui(rd, imm >> 12),
+            *Addi(rd, rd, (imm & 0xFFF) >> 1),
+            *Addi(rd, rd, ((imm & 0xFFF) >> 1) + int(imm & 1)),
         ]
     return [
-        Lui(rd, imm >> 12),
-        Addi(rd, rd, imm & 0xFFF),
+        *Lui(rd, imm >> 12),
+        *Addi(rd, rd, imm & 0xFFF),
     ]
 
 

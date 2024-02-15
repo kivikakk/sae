@@ -228,7 +228,9 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                             assert k[0] == "x"
                             self.assertReg(int(k[1:]), int(v, 0))
                     case Pragma(kind="word", args=[w]):
-                        self.body.append(int(w, 0))
+                        w = int(w, 0)
+                        self.body.append(w & 0xFFFF)
+                        self.body.append((w >> 16) & 0xFFFF)
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")

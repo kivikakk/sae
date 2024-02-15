@@ -19,7 +19,7 @@ class State(IntEnum, shape=1):
     FAULTED = 1
 
 
-class LoadSize(IntEnum, shape=2):
+class LsSize(IntEnum, shape=2):
     B = 0
     H = 1
     W = 2
@@ -40,20 +40,15 @@ class Top(Elaboratable):
     xreg: Array[Signal]
     xreg_written: Optional[Array[Signal]]
     pc: Signal
+    partial_read: Signal
 
     ls_reg: Signal
     ls_size: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or Memory(
-            width=8 * 4,
-            depth=1024 // 4,
-            init=[
-                rv32.Addi(Reg.X1, Reg.X0, 3),
-                rv32.Addi(Reg.X2, Reg.X1, 5),
-                rv32.Srai(Reg.X3, Reg.X2, 3),
-                0,
-            ],
+            width=16,
+            depth=1024 // 2,
         )
         self.reg_inits = reg_inits
         self.track_reg_written = track_reg_written
@@ -66,9 +61,10 @@ class Top(Elaboratable):
             self.xreg_written = Array(Signal() for _ in range(32))
 
         self.pc = Signal(self.XLEN)
+        self.partial_read = Signal(16)
 
         self.ls_reg = Signal(range(32))
-        self.ls_size = Signal(LoadSize)
+        self.ls_size = Signal(LsSize)
 
     def reg_reset(self, xn):
         if xn == 0:
@@ -89,32 +85,39 @@ class Top(Elaboratable):
         with m.FSM():
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
-            with m.State("fetch.init"):
+            with m.State("fetch.init0"):
                 m.d.sync += [
-                    self.sysmem_rd.addr.eq(self.pc >> 2),
+                    self.sysmem_rd.addr.eq(self.pc >> 1),
                     self.sysmem_wr.en.eq(0),
                 ]
-                m.next = "fetch.delay"
+                m.next = "fetch.init1"
 
                 with m.If(self.pc[:2].any()):
                     m.next = "faulted"
 
-            with m.State("fetch.delay"):
+            with m.State("fetch.init1"):
+                m.d.sync += self.sysmem_rd.addr.eq((self.pc >> 1) | 0b1)
+                m.next = "fetch.read0"
+
+            with m.State("fetch.read0"):
+                m.d.sync += self.partial_read.eq(self.sysmem_rd.data)
                 m.next = "fetch.resolve"
 
             with m.State("fetch.resolve"):
+                insn = Cat(self.partial_read, self.sysmem_rd.data)
+                assert len(insn) == self.ILEN
                 with m.If(
-                    (self.sysmem_rd.data[:16] == 0)
-                    | (self.sysmem_rd.data[: self.ILEN] == C(1, 1).replicate(self.ILEN))
+                    (insn[:16] == 0)
+                    | (insn[: self.ILEN] == C(1, 1).replicate(self.ILEN))
                 ):
                     m.next = "faulted"
                 with m.Else():
-                    v_i = InsI(self.sysmem_rd.data)
-                    v_u = InsU(self.sysmem_rd.data)
-                    v_r = InsR(self.sysmem_rd.data)
-                    v_j = InsJ(self.sysmem_rd.data)
-                    v_b = InsB(self.sysmem_rd.data)
-                    v_s = InsS(self.sysmem_rd.data)
+                    v_i = InsI(insn)
+                    v_u = InsU(insn)
+                    v_r = InsR(insn)
+                    v_j = InsJ(insn)
+                    v_b = InsB(insn)
+                    v_s = InsS(insn)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
@@ -122,22 +125,25 @@ class Top(Elaboratable):
 
                     # set pc/next before processing opcode so they can be
                     # overridden, set x0 after so it remains zero (lol).
-                    m.next = "fetch.init"
+                    m.next = "fetch.init0"
                     m.d.sync += self.pc.eq(self.pc + 4)
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
+                                    # Forcibly 16-bit aligned without a raise.
+                                    # Whoops XXX.
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
                                         self.sysmem_rd.addr.eq(
-                                            self.xreg[v_i.rs1] + v_i.imm.as_signed()
+                                            (self.xreg[v_i.rs1] + v_i.imm.as_signed())
+                                            >> 1
                                         ),
                                         self.ls_reg.eq(v_i.rd),
                                         self.ls_size.eq(4),
                                     ]
-                                    m.next = "lw.delay"
+                                    m.next = "lw.init1"
                         with m.Case(Opcode.OP_IMM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpImmFunct.ADDI):
@@ -232,15 +238,18 @@ class Top(Elaboratable):
                             imm = Cat(v_s.imm4_0, v_s.imm11_5)
                             with m.Switch(v_s.funct3):
                                 with m.Case(OpStoreFunct.SW):
+                                    # Forcibly 16-bit aligned without a raise.
+                                    # Sorry. XXX
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
                                         self.sysmem_wr.addr.eq(
-                                            self.xreg[v_s.rs1] + imm.as_signed()
+                                            (self.xreg[v_s.rs1] + imm.as_signed()) >> 1
                                         ),
+                                        self.sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
+                                        self.sysmem_wr.en.eq(1),
                                         self.ls_reg.eq(v_s.rs2),
-                                        self.ls_size.eq(4),
                                     ]
-                                    m.next = "sw.delay"
+                                    m.next = "sw.write1"
                         with m.Case(Opcode.BRANCH):
                             # TODO: we're meant to raise
                             # instruction-address-misaligned if the target
@@ -297,30 +306,34 @@ class Top(Elaboratable):
                                 ),
                             ]
 
-            with m.State("lw.delay"):
+            with m.State("lw.init1"):
+                m.d.sync += self.sysmem_rd.addr.eq(self.sysmem_rd.addr + 1)
+                m.next = "lw.read0"
+
+            with m.State("lw.read0"):
+                m.d.sync += self.partial_read.eq(self.sysmem_rd.data)
                 m.next = "lw.resolve"
 
             with m.State("lw.resolve"):
                 # TODO: honour ls_size
                 # TODO: l[hb]u?
+                data = Cat(self.partial_read, self.sysmem_rd.data)
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
-                    self.write_xreg(self.ls_reg, self.sysmem_rd.data),
+                    self.write_xreg(self.ls_reg, data),
                 ]
-                m.next = "fetch.init"
+                m.next = "fetch.init0"
 
-            with m.State("sw.delay"):
-                m.next = "sw.resolve"
-
-            with m.State("sw.resolve"):
+            with m.State("sw.write1"):
                 # TODO: honour ls_size
                 # TODO: s[hb]
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
-                    self.sysmem_wr.data.eq(self.xreg[self.ls_reg]),
+                    self.sysmem_wr.addr.eq(self.sysmem_wr.addr + 1),
+                    self.sysmem_wr.data.eq(self.xreg[self.ls_reg][16:]),
                     self.sysmem_wr.en.eq(1),
                 ]
-                m.next = "fetch.init"
+                m.next = "fetch.init0"
 
             with m.State("faulted"):
                 m.d.comb += self.state.eq(State.FAULTED)

@@ -29,9 +29,9 @@ def run_until_fault(top):
                 for i in range(1, 6):
                     print(f"  x{i}={(yield top.xreg[i]):08x}", end="")
                 print("    mem=", end="")
-                for i in range(4):
+                for i in range(8):
                     v = yield top.sysmem[i]
-                    print(f"{v:0>8x} ", end="")
+                    print(f"{v:0>4x} ", end="")
                 print("...")
 
         results["pc"] = yield top.pc
@@ -63,7 +63,7 @@ class InsnTestHelpers:
 
     def run_body(self, regs):
         top = Top(
-            sysmem=Memory(width=32, depth=len(self.body) + 1, init=self.body + [0]),
+            sysmem=Memory(width=16, depth=len(self.body) + 2, init=self.body + [0, 0]),
             reg_inits=regs,
             track_reg_written=True,
         )
