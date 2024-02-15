@@ -151,6 +151,18 @@ class Top(Elaboratable):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] < self.xreg[v_r.rs2]
                                     )
+                                with m.Case(OpRegFunct.AND):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] & self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.OR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] | self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.XOR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] ^ self.xreg[v_r.rs2]
+                                    )
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                         with m.Case(Opcode.AUIPC):

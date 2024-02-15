@@ -182,3 +182,46 @@ test_sltu:
     .init x1=1, x2=-1
     sltu x3, x1, x2
     .assert x3=1
+
+test_and:
+    .init x1=1, x2=3
+    and x3, x1, x2
+    .assert x3=1
+
+    .init x1=-1, x2=3
+    and x3, x1, x2
+    .assert x3=3
+
+    .init x1=3, x2=-1
+    and x3, x1, x2
+    .assert x3=3
+
+test_or:
+    .init x1=1, x2=2
+    or x3, x1, x2
+    .assert x3=3
+
+    .init x1=1, x2=-2
+    or x3, x1, x2
+    .assert x3=-1
+
+    .init x1=-2, x2=1
+    or x3, x1, x2
+    .assert x3=-1
+
+test_xor:
+    .init x1=0xAAAAAAAA, x2=-1
+    xor x3, x1, x2
+    .assert x3=0x55555555
+
+    .init x1=-1
+    xor x2, x0, x1
+    .assert x2=-1
+
+    .init x1=0x555
+    xor x2, x1, x1
+    .assert x2=0
+
+    .init x1=0xAAA, x2=0xFFFFFAAA
+    xor x3, x1, x2
+    .assert x3=0xFFFFF000
