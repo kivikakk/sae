@@ -147,6 +147,10 @@ class Top(Elaboratable):
                                         self.xreg[v_r.rs1].as_signed()
                                         < self.xreg[v_r.rs2].as_signed(),
                                     )
+                                with m.Case(OpRegFunct.SLTU):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] < self.xreg[v_r.rs2]
+                                    )
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                         with m.Case(Opcode.AUIPC):
