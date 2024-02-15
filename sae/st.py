@@ -64,7 +64,7 @@ def parse(tokens, *, line, lineno):
         lambda p: p[0] if p[1] is None else Assign(*p)
     )
 
-    arg = register_or_assign | number
+    arg = register_or_assign | number | tok("word")
     arglist = maybe(arg + many(-tok("comma") + arg)) >> (
         lambda p: [] if not p else [p[0]] + p[1]
     )

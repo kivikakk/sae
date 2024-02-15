@@ -1,3 +1,4 @@
+import inspect
 import unittest
 from contextlib import contextmanager
 from functools import singledispatchmethod
@@ -46,16 +47,18 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
 
     @singledispatchmethod
     @classmethod
-    def translate_arg(cls, arg):
+    def translate_arg(cls, arg, name):
         if isinstance(arg, st.Register):
             return Reg[f"X{arg.register[1:]}"]
         elif isinstance(arg, int):
             return arg
-        raise RuntimeError("arg weh {arg!r}")
+        elif name in ("pred", "succ"):
+            return arg
+        raise RuntimeError("arg weh {name!r} = {arg!r}")
 
     @translate_arg.register(list)
-    def translate_arg_list(cls, args):
-        return [cls.translate_arg(arg) for arg in args]
+    def translate_arg_list(cls, args, names):
+        return [cls.translate_arg(arg, name) for arg, name in zip(args, names)]
 
     def run_st(self, body):
         for line in body:
@@ -70,7 +73,9 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         self.results = None
                     case st.Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
-                        args = self.translate_arg(args)
+                        args = self.translate_arg(
+                            args, inspect.signature(insn).parameters.keys()
+                        )
                         ops = insn(*args)
                         if not isinstance(ops, list):
                             ops = [ops]

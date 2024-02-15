@@ -488,10 +488,10 @@ test_load_store:
     ;; lw x7,0(x8) reads *(x8+0) and writes to x7
     .assert x1=0x13, x2=0x13
 
-;; test_fence:
-;;     .init
-;;     fence iorw, r
-;;     fence.tso                   ; rw, rw
-;;     lw x1, x0, 0
-;;     lw x2, x0, 4
-;;     .assert x1=0x0F20000F, x2=0x0330000F
+test_fence:
+    .init
+    fence iorw, r
+    fence.tso                   ; rw, rw
+    lw x1, x0, 0
+    lw x2, x0, 4
+    .assert x1=0x0F20000F, x2=0x8330000F

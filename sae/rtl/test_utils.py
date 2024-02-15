@@ -70,20 +70,24 @@ class InsnTestHelpers:
     def assertReg(self, xr, v):
         rn = f"x{int(xr)}"
         self.__asserted.add(rn)
-        self.assertRegValue(v, self.results.get(rn, Unwritten))
+        self.assertRegValue(v, self.results.get(rn, Unwritten), rn=rn)
 
     def assertRegRest(self, v):
         for name, result in self.results.items():
             if name in self.__asserted:
                 continue
-            self.assertRegValue(v, result)
+            self.assertRegValue(v, result, rn=name)
 
-    def assertRegValue(self, expected, actual):
+    def assertRegValue(self, expected, actual, *, rn=None):
+        if rn is not None:
+            rn = f"{rn}="
         if expected is Unwritten or actual is Unwritten:
-            self.assertIs(expected, actual)
+            self.assertIs(
+                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
+            )
             return
         if expected < 0:
             expected += 2**32  # XLEN
         self.assertEqual(
-            expected, actual, f"expected 0x{expected:X}, actual 0x{actual:X}"
+            expected, actual, f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}"
         )

@@ -1,3 +1,4 @@
+import re
 from functools import partial
 
 from amaranth import Memory, unsigned
@@ -118,6 +119,10 @@ class OpStoreFunct(IntEnum, shape=3):
     SW = 0b010
 
 
+class OpMiscMemFunct(IntEnum, shape=3):
+    FENCE = 0b000
+
+
 # R:
 #   31-25: funct7
 #   24-20: rs2
@@ -206,6 +211,34 @@ for op in ["lw", "lh", "lhu", "lb", "lbu"]:
         )
 
     add_insn(op, f)
+
+FENCE_ARG = re.compile(r"\A[rwio]+\Z")
+
+
+def fence_arg(a):
+    a = a.lower()
+    assert FENCE_ARG.match(a) is not None
+    return (
+        (0b0001 if "w" in a else 0)
+        | (0b0010 if "r" in a else 0)
+        | (0b0100 if "o" in a else 0)
+        | (0b1000 if "i" in a else 0)
+    )
+
+
+def fence(op, pred, succ, *, fm=0):
+    return value(
+        InsI,
+        opcode=Opcode.MISC_MEM,
+        rd=0,
+        funct3=OpMiscMemFunct.FENCE,
+        rs1=0,
+        imm=fence_arg(succ) | (fence_arg(pred) << 4) | (fm << 8),
+    )
+
+
+add_insn("fence", fence)
+add_insn("fence.tso", lambda op: fence(op, "rw", "rw", fm=0b1000))
 
 
 def li(op, rd, imm):
