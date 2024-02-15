@@ -169,3 +169,16 @@ test_slt:
     .init x1=-1
     slt x2, x0, x1
     .assert x2=0
+
+test_sltu:
+    .init x1=1
+    sltu x2, x1, x1
+    .assert x2=0
+
+    .init x1=1, x2=2
+    sltu x3, x1, x2
+    .assert x3=1
+
+    .init x1=1, x2=-1
+    sltu x3, x1, x2
+    .assert x3=1
