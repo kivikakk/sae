@@ -195,11 +195,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1707957407,
-        "narHash": "sha256-sm0oFf8cCBTNtou3kOkSwaUkPBouC4k1w8D5caZAMOw=",
+        "lastModified": 1707958753,
+        "narHash": "sha256-5JLF2pBJAeR9lcLCb65nmwA8zeJuYMcQTn67uY/WCMk=",
         "ref": "refs/heads/main",
-        "rev": "b546913010d7df6ded41aa9c57eff415ae3e22a2",
-        "revCount": 16,
+        "rev": "5281f6def7863e97d6d8aef5ba478c6a3be3fb09",
+        "revCount": 18,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/rainhdx"
       },
