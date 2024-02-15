@@ -1,7 +1,7 @@
 from typing import Optional
 
 from amaranth import Array, C, Elaboratable, Module, Mux, Signal, signed
-from amaranth.hdl.mem import Memory, ReadPort, WritePort
+from amaranth.hdl import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
