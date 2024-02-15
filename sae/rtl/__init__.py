@@ -223,10 +223,10 @@ class Top(Elaboratable):
                                     ):
                                         m.d.sync += self.pc.eq(self.pc + imm)
                                 with m.Case(OpBranchFunct.BLTU):
-                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                    with m.If(self.xreg[v_b.rs1] < self.xreg[v_b.rs2]):
                                         m.d.sync += self.pc.eq(self.pc + imm)
                                 with m.Case(OpBranchFunct.BGEU):
-                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                    with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
                                         m.d.sync += self.pc.eq(self.pc + imm)
                         with m.Case(Opcode.JALR):
                             m.d.sync += [

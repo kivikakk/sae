@@ -391,3 +391,84 @@ test_bne:
     .word 0
     li x1, 0xABCD
     .assert x1=0xABCD
+
+test_blt:
+    .init x1=-1
+    blt x1, x0, 8
+    .word 0
+    li x2, 0x099999
+    .assert x2=0x099999
+
+    .init
+    blt x0, x0, 8
+    j 8
+    .word 0
+    li x1, 0x777
+    .assert x1=0x777
+
+test_bge:
+    .init
+    bge x0, x0, 8
+    .word 0
+    li x1, 0x6969
+    .assert x1=0x6969
+
+    .init x1=1
+    bge x1, x0, 8
+    .word 0
+    li x2, 0xBEEF
+    .assert x2=0xBEEF
+
+    .init x1=-1
+    bge x1, x0, 8
+    j 8
+    .word 0
+    li x2, 0xafafafaf
+    .assert x2=0xafafafaf
+
+test_bltu:
+    .init x1=-1
+    bltu x1, x0, 8
+    j 8
+    .word 0
+    li x2, 0x099999
+    .assert x2=0x099999
+
+    .init
+    bltu x0, x0, 8
+    j 8
+    .word 0
+    li x1, 0x777
+    .assert x1=0x777
+
+    .init x1=1
+    bltu x0, x1, 8
+    .word 0
+    li x2, 0x099999
+    .assert x2=0x099999
+
+test_bgeu:
+    .init
+    bgeu x0, x0, 8
+    .word 0
+    li x1, 0x6969
+    .assert x1=0x6969
+
+    .init x1=1
+    bgeu x1, x0, 8
+    .word 0
+    li x2, 0xBEEF
+    .assert x2=0xBEEF
+
+    .init x1=1
+    bgeu x0, x1, 8
+    j 8
+    .word 0
+    li x2, 0xCAFE
+    .assert x2=0xCAFE
+
+    .init x1=-1
+    bgeu x1, x0, 8
+    .word 0
+    li x2, 0xafafafaf
+    .assert x2=0xafafafaf
