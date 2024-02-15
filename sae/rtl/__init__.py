@@ -107,7 +107,7 @@ class Top(Elaboratable):
                                     )
                                 with m.Case(OpImmFunct.SLTI):
                                     m.d.sync += self.write_xreg(
-                                        v_i.rd, self.xreg[v_i.rs1] < v_sxi
+                                        v_i.rd, self.xreg[v_i.rs1].as_signed() < v_sxi
                                     )
                                 with m.Case(OpImmFunct.SLTIU):
                                     m.d.sync += self.write_xreg(
@@ -140,6 +140,12 @@ class Top(Elaboratable):
                                 with m.Case(OpRegFunct.ADD):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] + self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.SLT):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        self.xreg[v_r.rs1].as_signed()
+                                        < self.xreg[v_r.rs2].as_signed(),
                                     )
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)

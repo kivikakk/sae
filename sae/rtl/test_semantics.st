@@ -23,6 +23,7 @@ test_slti:
     .init
     slti x1, x0, 1
     .assert x1=1
+
     .init
     slti x1, x0, -1
     .assert x1=0
@@ -155,3 +156,16 @@ test_add:
     .init x1=0xffffffff
     add x1, x1, x1
     .assert x1=0xfffffffe
+
+test_slt:
+    .init
+    slt x1, x0, x0
+    .assert x1=0
+
+    .init x1=1
+    slt x2, x0, x1
+    .assert x2=1
+
+    .init x1=-1
+    slt x2, x0, x1
+    .assert x2=0
