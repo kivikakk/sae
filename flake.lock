@@ -20,11 +20,11 @@
     "amaranth": {
       "flake": false,
       "locked": {
-        "lastModified": 1707513334,
-        "narHash": "sha256-nIl7ffzw0vXeZojXfQ0IsmqQS0i9WZudJ90C4/FG68c=",
+        "lastModified": 1707937994,
+        "narHash": "sha256-dHTExz9W4VeshTj/vz0UectfrJExaXRIVknRk7E1F70=",
         "owner": "amaranth-lang",
         "repo": "amaranth",
-        "rev": "05ac36751a04c6c574f65702a4a441ed865bf69f",
+        "rev": "e3324e14566f15653c119ec68ec83d71eea0c04c",
         "type": "github"
       },
       "original": {
@@ -117,11 +117,11 @@
         "z3": "z3"
       },
       "locked": {
-        "lastModified": 1707548722,
-        "narHash": "sha256-vvAsxr4OVNCyA0tYFHwzT9MASGDK4SjoHrkKeQligzU=",
+        "lastModified": 1707956613,
+        "narHash": "sha256-xnDbJgljci34QxZO1ZfSoyCVBS0KVPwr/kfsvCy7U6A=",
         "ref": "refs/heads/main",
-        "rev": "45891071d66e1c302465668c06f8c92f281c65d3",
-        "revCount": 116,
+        "rev": "557ff7502ddebb8895e12b6923e4a8b325549d18",
+        "revCount": 117,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/hdx"
       },
@@ -195,11 +195,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1707548922,
-        "narHash": "sha256-j6FO9Xv74ikdTdT+JwR6L89vtyAGO7Ct7dyjhU3xgnI=",
+        "lastModified": 1707957407,
+        "narHash": "sha256-sm0oFf8cCBTNtou3kOkSwaUkPBouC4k1w8D5caZAMOw=",
         "ref": "refs/heads/main",
-        "rev": "082b91a171b577409b32b942f59861da431237b3",
-        "revCount": 14,
+        "rev": "b546913010d7df6ded41aa9c57eff415ae3e22a2",
+        "revCount": 16,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/rainhdx"
       },
@@ -291,11 +291,11 @@
     "yosys": {
       "flake": false,
       "locked": {
-        "lastModified": 1707524113,
-        "narHash": "sha256-eFKoFaO+0kDpHJXHMzvCR80kT1bffXW7lPyfeTK6yWw=",
+        "lastModified": 1707925721,
+        "narHash": "sha256-uNYrpdAJrrAHQMn1IO3ozak4i9qy9op3FlyO8MYGY7o=",
         "owner": "YosysHQ",
         "repo": "yosys",
-        "rev": "31dbd915ca27d095b59a33e55cb4e5c771945ba4",
+        "rev": "f04bb1065e77e466ad8d45cf60353baa5804e0b6",
         "type": "github"
       },
       "original": {
