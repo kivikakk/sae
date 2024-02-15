@@ -1,9 +1,7 @@
-import os
 import rainhdx
-import subprocess
 from amaranth_boards.icebreaker import ICEBreakerPlatform
 
-from . import rtl, formal
+from . import formal, rtl
 
 __all__ = ["Sae", "icebreaker"]
 

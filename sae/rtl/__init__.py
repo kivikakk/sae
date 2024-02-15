@@ -39,9 +39,9 @@ class Top(Elaboratable):
             width=8 * 4,
             depth=1024 // 4,
             init=[
-                rv32.Addi(Reg.X0, Reg.X1, 3),
-                rv32.Addi(Reg.X1, Reg.X2, 5),
-                rv32.Srai(Reg.X2, Reg.X3, 3),
+                rv32.Addi(Reg.X1, Reg.X0, 3),
+                rv32.Addi(Reg.X2, Reg.X1, 5),
+                rv32.Srai(Reg.X3, Reg.X2, 3),
                 0,
             ],
         )
