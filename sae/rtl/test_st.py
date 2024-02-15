@@ -216,7 +216,10 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                     case Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
                         args = self.translate_arg(args, insn)
-                        self.body.append(insn(*args))
+                        ops = insn(*args)
+                        if not isinstance(ops, list):
+                            ops = [ops]
+                        self.body.extend(ops)
                     case PragmaEq(kind="assert", pairs=pairs):
                         if self.results is None:
                             self.run_body(self.__reg_inits)

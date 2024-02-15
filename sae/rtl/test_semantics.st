@@ -15,6 +15,16 @@ test_addi:
     addi x3, x2, -3
     .assert x1=1, x2=-1, x3=-4
 
+    .init
+    addi x1, x0, 3
+    mv x2, x1
+    .assert x1=3, x2=3
+
+    .init
+    li x1, 0x123
+    li x2, 0x12345678
+    .assert x1=0x123, x2=0x12345678
+
 test_slti:
     .init
     slti x1, x0, 0
@@ -40,6 +50,18 @@ test_sltiu:
     .init x1=1
     sltiu x2, x1, -1
     .assert x2=1
+
+    .init
+    seqz x1, x0
+    .assert x1=1
+
+    .init x1=1
+    seqz x2, x1
+    .assert x2=0
+
+    .init x1=-1
+    seqz x2, x1
+    .assert x2=0
 
 test_andi:
     .init x1=1
@@ -83,6 +105,14 @@ test_xori:
     .init x1=0xAAA
     xori x2, x1, 0xAAA          ; sx to 0xFFFFFAAA
     .assert x2=0xFFFFF000
+
+    .init
+    not x1, x0
+    .assert x1=0xFFFFFFFF
+
+    .init x1=0xFFFFFFFF
+    not x2, x1
+    .assert x2=0
 
 test_slli:
     .init x1=0x55555555
@@ -183,6 +213,18 @@ test_sltu:
     sltu x3, x1, x2
     .assert x3=1
 
+    .init
+    snez x1, x0
+    .assert x1=0
+
+    .init x1=1
+    snez x2, x1
+    .assert x2=1
+
+    .init x1=-1
+    snez x2, x1
+    .assert x2=1
+
 test_and:
     .init x1=1, x2=3
     and x3, x1, x2
@@ -225,3 +267,61 @@ test_xor:
     .init x1=0xAAA, x2=0xFFFFFAAA
     xor x3, x1, x2
     .assert x3=0xFFFFF000
+
+test_sll:
+    .init x1=0x55555555, x2=1
+    sll x3, x1, x2
+    .assert x3=0xAAAAAAAA
+
+    .init x1=0x55555555, x2=2
+    sll x3, x1, x2
+    .assert x3=0x55555554
+
+    .init x1=0x55555555, x2=3
+    sll x3, x1, x2
+    .assert x3=0xAAAAAAA8
+
+    .init x1=0x55555555, x2=4
+    sll x3, x1, x2
+    .assert x3=0x55555550
+
+    ;; ensure we only use the lower 5 bits of rs2
+    .init x1=0x55555555, x2=0xE1
+    sll x3, x1, x2
+    .assert x3=0xAAAAAAAA
+
+test_srl:
+    .init x1=0x55555555, x2=1
+    srl x3, x1, x2
+    .assert x3=0x2AAAAAAA
+
+    .init x1=0x55555555, x2=2
+    srl x3, x1, x2
+    .assert x3=0x15555555
+
+    .init x1=0x55555555, x2=0xE2
+    srl x3, x1, x2
+    .assert x3=0x15555555
+
+test_sra:
+    .init x1=0x55555555, x2=1
+    sra x3, x1, x2
+    .assert x3=0x2AAAAAAA
+
+    .init x1=0xAAAAAAAA, x2=1
+    sra x3, x1, x2
+    .assert x3=0xD5555555
+
+    .init x1=0xAAAAAAAA, x2=2
+    sra x3, x1, x2
+    .assert x3=0xEAAAAAAA
+
+    .init x1=0xAAAAAAAA, x2=3
+    sra x3, x1, x2
+    .assert x3=0xF5555555
+
+    .init x1=0xAAAAAAAA, x2=0xE3
+    sra x3, x1, x2
+    .assert x3=0xF5555555
+
+test_sub:

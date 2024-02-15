@@ -137,9 +137,14 @@ class Top(Elaboratable):
                                     )
                         with m.Case(Opcode.OP):
                             with m.Switch(v_r.funct3):
-                                with m.Case(OpRegFunct.ADD):
+                                with m.Case(OpRegFunct.ADDSUB):
                                     m.d.sync += self.write_xreg(
-                                        v_r.rd, self.xreg[v_r.rs1] + self.xreg[v_r.rs2]
+                                        v_r.rd,
+                                        Mux(
+                                            v_r.funct7[5],
+                                            self.xreg[v_r.rs1] - self.xreg[v_r.rs2],
+                                            self.xreg[v_r.rs1] + self.xreg[v_r.rs2],
+                                        ),
                                     )
                                 with m.Case(OpRegFunct.SLT):
                                     m.d.sync += self.write_xreg(
@@ -162,6 +167,21 @@ class Top(Elaboratable):
                                 with m.Case(OpRegFunct.XOR):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] ^ self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.SLL):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        self.xreg[v_r.rs1] << self.xreg[v_r.rs2][:5],
+                                    )
+                                with m.Case(OpRegFunct.SR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        Mux(
+                                            v_r.funct7[5],
+                                            self.xreg[v_r.rs1].as_signed(),
+                                            self.xreg[v_r.rs1],
+                                        )
+                                        >> self.xreg[v_r.rs2][:5],
                                     )
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)

@@ -66,16 +66,14 @@ class OpImmFunct(Enum, shape=3):
 
 
 class OpRegFunct(IntEnum, shape=10):
-    ADD = 0b000
+    ADDSUB = 0b000
     SLT = 0b010
     SLTU = 0b011
     AND = 0b111
     OR = 0b110
     XOR = 0b100
     SLL = 0b001
-    SRL = 0b101
-    SUB = 0b0100000000
-    SRA = 0b0100000101
+    SR = 0b101
 
 
 # R:
@@ -97,18 +95,25 @@ class InsR(Struct):
 for op in ["add", "slt", "sltu", "and", "or", "xor", "sll", "srl", "sub", "sra"]:
 
     def f(op, rd, rs1, rs2):
-        funct = OpRegFunct[op.upper()]
+        funct3, funct7 = {
+            "add": ("ADDSUB", 0),
+            "srl": ("SR", 0),
+            "sub": ("ADDSUB", 0b0100000),
+            "sra": ("SR", 0b0100000),
+        }.get(op, (op.upper(), 0))
         return value(
             InsR,
             opcode=Opcode.OP,
-            funct3=funct & 0x7,
+            funct3=OpRegFunct[funct3],
             rs1=rs1,
             rs2=rs2,
             rd=rd,
-            funct7=funct >> 3,
+            funct7=funct7,
         )
 
     add_insn(op, f)
+
+add_insn("snez", lambda op, rd, rs: Sltu(rd, Reg.X0, rs))
 
 
 # I:
@@ -146,16 +151,31 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori"]:
 
     add_insn(op, f)
 
+
+def li(op, rd, imm):
+    if (imm & 0xFFF) == imm:
+        return Addi(rd, Reg.X0, imm)
+    return [
+        Lui(rd, imm >> 12),
+        Addi(rd, rd, imm & 0xFFF),
+    ]
+
+
+add_insn("li", li)
+
+add_insn("mv", lambda op, rd, rs: Addi(rd, rs, 0))
+add_insn("seqz", lambda op, rd, rs: Sltiu(rd, rs, 1))
+add_insn("not", lambda op, rd, rs: Xori(rd, rs, -1))
+
 for op in ["slli", "srli", "srai"]:
 
     def f(op, rd, rs1, shamt):
         assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
 
         funct, imm11_5 = {
-            "slli": ("SLLI", 0),
             "srli": ("SRI", 0b0000000),
             "srai": ("SRI", 0b0100000),
-        }[op]
+        }.get(op, (op.upper(), 0))
         return value(
             InsI,
             opcode=Opcode.OP_IMM,
