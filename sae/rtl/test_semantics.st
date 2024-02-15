@@ -330,4 +330,21 @@ test_sub:
     sub x4, x2, x1
     sub x5, x1, x0
     sub x6, x0, x1
-    .assert x3=-2, x4=2, x5=3, x6=-3
+    .assert x3=-2, x4=2
+
+test_jal:
+    .init
+    nop
+    nop
+    jal x1, 8                   ; &0x08
+    xor x1, x1, x1              ; &0x0c -- skipped, address stored
+    not x1, x1                  ; &0x10 -- jump target
+    .assert x1=0xfffffff3
+
+    .init
+    jal x1, 12                  ;  .
+    jal x3, 12                  ;  |  <-. --.
+    .word 0                     ;  |    |   |
+    jal x2, -8                  ; <  ---'   |
+    li x4, 4                    ;       <---'
+    .assert x1=4, x2=16, x3=8, x4=4

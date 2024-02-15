@@ -1,11 +1,11 @@
-import inspect
 import re
 import unittest
 from contextlib import contextmanager
 from enum import Enum
 from functools import singledispatchmethod
+from itertools import chain
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from . import Top
 from .rv32 import INSNS, Reg
@@ -19,21 +19,21 @@ class ParserState(Enum):
 
 RE_EMPTY = re.compile(r"\A\s* (?:;.*)? \Z", re.VERBOSE)
 RE_TEST_START = re.compile(r"\A (\w+): \s* (?:;.*)? \Z", re.VERBOSE)
-RE_TEST_PRAGMAEQ = re.compile(
+RE_TEST_PRAGMA = re.compile(
     r"""
     \A\s* \.(\w+)
     (?:
       \s+
       (
-        (?:\w+) \s*=\s* (?:-?\s*\w+)
-        (?: \s*,\s* (?:\w+) \s*=\s* (?:-?\s*\w+) )*
+        (?:\w+) \s* (?: =\s* (?:-?\s*\w+))?
+        (?: \s*,\s* (?:\w+) \s* (?: =\s* (?:-?\s*\w+))? )*
       )
     )?
     \s* (?:;.*)? \Z
 """,
     re.VERBOSE,
 )
-RE_TEST_PRAGMAEQ_PAIR = re.compile(r" (\w+) \s*=\s* ((?:-\s*)?\w+) ", re.VERBOSE)
+RE_TEST_PRAGMA_PAIR = re.compile(r" (\w+) \s* (?: =\s* ((?:-\s*)?\w+))? ", re.VERBOSE)
 RE_TEST_OP = re.compile(
     r"""
     \A\s*
@@ -52,20 +52,30 @@ RE_TEST_OP = re.compile(
 RE_TEST_OP_ARG = re.compile(r" ((?:-\s*)?\w+) ", re.VERBOSE)
 
 
-class PragmaEq:
+class Pragma:
     kind: str
-    pairs: dict[str, int]
+    args: list[Any]
+    kwargs: dict[str, Any]
     line: str
     lineno: int
 
     def __init__(self, kind, pairs, *, line, lineno):
         self.kind = kind
-        self.pairs = pairs
+        self.args = []
+        self.kwargs = {}
+        if any(pairs.values()):
+            self.kwargs = pairs
+        elif pairs:
+            self.args = list(pairs.keys())
         self.line = line
         self.lineno = lineno
 
     def __repr__(self):
-        return f'{self.kind}({", ".join(f"{k}={v}" for k, v in self.pairs.items())})'
+        items = chain(
+            (str(arg) for arg in self.args),
+            (f"{k}={v}" for k, v in self.kwargs.items()),
+        )
+        return f'{self.kind}({", ".join(items)})'
 
 
 class Op:
@@ -87,10 +97,10 @@ class Op:
 class StParser:
     state: ParserState
     test_name: Optional[str]
-    test_body: Optional[list[PragmaEq | Op]]
+    test_body: Optional[list[Pragma | Op]]
     lineno: int
 
-    results: list[tuple[str, list[PragmaEq | Op]]]
+    results: list[tuple[str, list[Pragma | Op]]]
 
     def __init__(self):
         self.state = ParserState.Start
@@ -113,14 +123,14 @@ class StParser:
                     raise RuntimeError(f"what's {line!r}, precious?")
             case ParserState.TestBody:
                 assert self.test_body is not None
-                if groups := RE_TEST_PRAGMAEQ.match(line):
+                if groups := RE_TEST_PRAGMA.match(line):
                     kind = groups[1]
                     pairs = {}
                     if groups[2] is not None:
-                        for k, v in RE_TEST_PRAGMAEQ_PAIR.findall(groups[2]):
-                            pairs[k] = int(v, 0)
+                        for m in RE_TEST_PRAGMA_PAIR.finditer(groups[2]):
+                            pairs[m[1]] = m[2]
                     self.test_body.append(
-                        PragmaEq(kind, pairs, line=line, lineno=self.lineno)
+                        Pragma(kind, pairs, line=line, lineno=self.lineno)
                     )
                 elif groups := RE_TEST_OP.match(line):
                     opcode = groups[1]
@@ -208,9 +218,9 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
             for line in body:
                 seh.notify(line)
                 match line:
-                    case PragmaEq(kind="init", pairs=pairs):
+                    case Pragma(kind="init", kwargs=kwargs):
                         self.__fish()
-                        self.__reg_inits = pairs
+                        self.__reg_inits = {k: int(v, 0) for k, v in kwargs.items()}
                         self.body = []
                         self.results = None
                     case Op(opcode=opcode, args=args):
@@ -220,12 +230,14 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         if not isinstance(ops, list):
                             ops = [ops]
                         self.body.extend(ops)
-                    case PragmaEq(kind="assert", pairs=pairs):
+                    case Pragma(kind="assert", kwargs=kwargs):
                         if self.results is None:
                             self.run_body(self.__reg_inits)
-                        for k, v in pairs.items():
+                        for k, v in kwargs.items():
                             assert k[0] == "x"
-                            self.assertReg(int(k[1:]), int(v))
+                            self.assertReg(int(k[1:]), int(v, 0))
+                    case Pragma(kind="word", args=[w]):
+                        self.body.append(int(w, 0))
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")

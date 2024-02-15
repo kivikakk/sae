@@ -4,7 +4,17 @@ from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import Enum, IntEnum
 
-__all__ = ["INSNS", "Reg", "Opcode", "OpImmFunct", "OpRegFunct", "InsI", "InsU", "InsR"]
+__all__ = [
+    "INSNS",
+    "Reg",
+    "Opcode",
+    "OpImmFunct",
+    "OpRegFunct",
+    "InsI",
+    "InsU",
+    "InsR",
+    "InsJ",
+]
 
 INSNS = {}
 
@@ -166,6 +176,7 @@ add_insn("li", li)
 add_insn("mv", lambda op, rd, rs: Addi(rd, rs, 0))
 add_insn("seqz", lambda op, rd, rs: Sltiu(rd, rs, 1))
 add_insn("not", lambda op, rd, rs: Xori(rd, rs, -1))
+add_insn("nop", lambda op: Addi(Reg.X0, Reg.X0, 0))
 
 for op in ["slli", "srli", "srai"]:
 
@@ -240,5 +251,27 @@ for op in ["lui", "auipc"]:
 #   19-12: imm[19:12]
 #    11-7: rd
 #     6-0: opcode
+#
+class InsJ(Struct):
+    opcode: Opcode
+    rd: Reg
+    imm19_12: unsigned(8)
+    imm11: unsigned(1)
+    imm10_1: unsigned(10)
+    imm20: unsigned(1)
 
-add_insn("nop", lambda op: Addi(Reg.X0, Reg.X0, 0))
+
+def jal(op, rd, imm):
+    assert not (imm & 0b1)
+    return value(
+        InsJ,
+        opcode=Opcode.JAL,
+        rd=rd,
+        imm19_12=(imm >> 12) & 0xFF,
+        imm11=(imm >> 11) & 0b1,
+        imm10_1=(imm >> 1) & 0x3FF,
+        imm20=imm >> 20,
+    )
+
+
+add_insn("jal", jal)

@@ -1,11 +1,11 @@
 from typing import Optional
 
-from amaranth import Array, C, Elaboratable, Module, Mux, Signal, signed
+from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Signal, signed
 from amaranth.hdl import Memory, ReadPort, WritePort
 from amaranth.lib.enum import IntEnum
 
 from . import rv32
-from .rv32 import InsI, InsR, InsU, Opcode, OpImmFunct, OpRegFunct, Reg
+from .rv32 import InsI, InsJ, InsR, InsU, Opcode, OpImmFunct, OpRegFunct, Reg
 
 __all__ = [
     "Top",
@@ -93,10 +93,13 @@ class Top(Elaboratable):
                     v_i = InsI(self.sysmem_rd.data)
                     v_u = InsU(self.sysmem_rd.data)
                     v_r = InsR(self.sysmem_rd.data)
+                    v_j = InsJ(self.sysmem_rd.data)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
                     m.d.comb += v_sxi.eq(v_i.imm.as_signed())
+
+                    m.d.sync += self.pc.eq(self.pc + 4)
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.OP_IMM):
@@ -189,7 +192,21 @@ class Top(Elaboratable):
                             m.d.sync += self.write_xreg(
                                 v_u.rd, (v_u.imm << 12) + self.pc
                             )
-                    m.d.sync += self.pc.eq(self.pc + 4)
+                        with m.Case(Opcode.JAL):
+                            m.d.sync += [
+                                self.write_xreg(v_j.rd, self.pc + 4),
+                                self.pc.eq(
+                                    self.pc
+                                    + Cat(  # meow :3
+                                        C(0, 1),
+                                        v_j.imm10_1,
+                                        v_j.imm11,
+                                        v_j.imm19_12,
+                                        v_j.imm20,
+                                    ).as_signed()
+                                ),
+                            ]
+
                     m.next = "fetch.init"
 
             with m.State("faulted"):
