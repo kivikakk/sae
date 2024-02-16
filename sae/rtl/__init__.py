@@ -57,9 +57,15 @@ class Top(Elaboratable):
     ls_off: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
+        init = [
+            *rv32.Li(rv32.Reg.X1, 0x1234CAFE),
+            *rv32.Sw(rv32.Reg.X1, (0, rv32.Reg.X0)),
+            0,
+        ]
         self.sysmem = sysmem or Memory(
             width=16,
-            depth=1024 // 2,
+            depth=1024,
+            init=init,
         )
         self.reg_inits = reg_inits
         self.track_reg_written = track_reg_written
@@ -69,13 +75,13 @@ class Top(Elaboratable):
         self.fault_insn = Signal(self.ILEN)
 
         self.xreg = Array(
-            Signal(self.XLEN, reset=self.reg_reset(xn)) for xn in range(32)
+            Signal(self.XLEN, init=self.reg_reset(xn)) for xn in range(32)
         )
         if self.track_reg_written:
             self.xreg_written = Array(Signal() for _ in range(32))
 
         self.pc = Signal(self.XLEN)
-        self.partial_read = Signal(16)
+        self.partial_read = Signal(32)
 
         self.ls_reg = Signal(range(32))
         self.ls_off = Signal()
@@ -116,10 +122,16 @@ class Top(Elaboratable):
 
             with m.State("fetch.read0"):
                 m.d.sync += self.partial_read.eq(self.sysmem_rd.data)
+                m.next = "fetch.cat"
+
+            with m.State("fetch.cat"):
+                m.d.sync += self.partial_read.eq(
+                    Cat(self.partial_read[:16], self.sysmem_rd.data)
+                )
                 m.next = "fetch.resolve"
 
             with m.State("fetch.resolve"):
-                insn = Cat(self.partial_read, self.sysmem_rd.data)
+                insn = self.partial_read
                 assert len(insn) == self.ILEN
                 with m.If(
                     (insn[:16] == 0)
@@ -426,7 +438,7 @@ class Top(Elaboratable):
                 m.next = "lw.resolve"
 
             with m.State("lw.resolve"):
-                data = Cat(self.partial_read, self.sysmem_rd.data)
+                data = Cat(self.partial_read[:16], self.sysmem_rd.data)
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
                     self.write_xreg(self.ls_reg, data),

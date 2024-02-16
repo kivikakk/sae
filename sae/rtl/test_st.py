@@ -81,14 +81,27 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                             ops = [ops]
                         self.body.extend(ops)
                     case st.Pragma(kind="assert", args=args):
+                        asserts = {
+                            assign.register.register: assign.assign for assign in args
+                        }
                         if self.results is None:
                             self.run_body(self.__reg_inits)
-                            self.assertReg("faultcode", FaultCode.ILLEGAL_INSTRUCTION)
-                            self.assertReg("faultinsn", 0xFFFFFFFF)
-                        for assign in args:
-                            reg = assign.register.register
+                            self.assertReg(
+                                "faultcode",
+                                int(
+                                    asserts.pop(
+                                        "faultcode", str(FaultCode.ILLEGAL_INSTRUCTION)
+                                    ),
+                                    0,
+                                ),
+                            )
+                            self.assertReg(
+                                "faultinsn",
+                                int(asserts.pop("faultinsn", "0xFFFFFFFF"), 0),
+                            )
+                        for reg, assign in asserts.items():
                             assert reg[0] == "x"
-                            self.assertReg(reg, assign.assign)
+                            self.assertReg(reg, assign)
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)
@@ -100,6 +113,9 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
     def __fish(self):
         if self.results is not None:
             self.assertRegRest(Unwritten)
+
+
+print(list(Path(__file__).parent.glob("*.st")))
 
 
 class TestSemanticsSt(StTestCase):

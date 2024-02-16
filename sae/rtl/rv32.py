@@ -205,11 +205,18 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr", "load"]:
 
     add_insn(op, f)
 
+
+def hoff(offset):
+    """Take an Offset or a (offset, reg) pair, spit out the latter."""
+    if isinstance(offset, tuple):
+        return offset
+    return (offset.offset, Reg[offset.register.register.upper()])
+
+
 for op in ["lw", "lh", "lhu", "lb", "lbu"]:
 
     def f(op, rd, rs1off):
-        rs1 = Reg[rs1off.register.register.upper()]
-        imm = rs1off.offset
+        (imm, rs1) = hoff(rs1off)
         return value(
             InsI,
             opcode=Opcode.LOAD,
@@ -323,8 +330,7 @@ class InsS(Struct):
 for op in ["sw", "sh", "sb"]:
 
     def f(op, rs2, rs1off):
-        rs1 = Reg[rs1off.register.register.upper()]
-        imm = rs1off.offset
+        (imm, rs1) = hoff(rs1off)
         return value(
             InsS,
             opcode=Opcode.STORE,
