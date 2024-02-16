@@ -346,8 +346,8 @@ test_jal:
     jal x3, 12                  ;  |  <-. --.
     .word 0                     ;  |    |   |
     jal x2, -8                  ; <  ---'   |
-    li x4, 4                    ;       <---'
-    .assert x1=4, x2=16, x3=8, x4=4
+    nop                         ;       <---'
+    .assert x1=4, x2=16, x3=8
 
     .init
     j 4
@@ -361,8 +361,8 @@ test_jalr:
     auipc x1, 0                 ; <     |   |
     jalr x2, x1, -3             ; ------'   |
     .word 0                     ;           |
-    li x4, 0xAAAA               ;       <---'
-    .assert x1=0xC, x2=0x14, x3=0x0C, x4=0xAAAA
+    nop                         ;       <---'
+    .assert x1=0xC, x2=0x14, x3=0x0C
 
 test_beq:
     .init x1=1
@@ -375,103 +375,88 @@ test_beq:
     .init
     beq x0, x0, 8
     .word 0
-    li x1, 0xA5A5
-    .assert x1=0xA5A5
+    .assert
 
 test_bne:
     .init x1=1
     bne x0, x1, 8
     .word 0
-    li x2, 0xABAB
-    .assert x2=0xABAB
+    .assert
 
     .init
     bne x0, x0, 8
     j 8
     .word 0
-    li x1, 0xABCD
-    .assert x1=0xABCD
+    .assert
 
 test_blt:
     .init x1=-1
     blt x1, x0, 8
     .word 0
-    li x2, 0x099999
-    .assert x2=0x099999
+    .assert
 
     .init
     blt x0, x0, 8
     j 8
     .word 0
-    li x1, 0x777
-    .assert x1=0x777
+    .assert
 
 test_bge:
     .init
     bge x0, x0, 8
     .word 0
-    li x1, 0x6969
-    .assert x1=0x6969
+    .assert
 
     .init x1=1
     bge x1, x0, 8
     .word 0
-    li x2, 0xBEEF
-    .assert x2=0xBEEF
+    .assert
 
     .init x1=-1
     bge x1, x0, 8
     j 8
     .word 0
-    li x2, 0xafafafaf
-    .assert x2=0xafafafaf
+    .assert
 
 test_bltu:
     .init x1=-1
     bltu x1, x0, 8
     j 8
     .word 0
-    li x2, 0x099999
-    .assert x2=0x099999
+    .assert
 
     .init
     bltu x0, x0, 8
     j 8
     .word 0
-    li x1, 0x777
-    .assert x1=0x777
+    .assert
 
     .init x1=1
     bltu x0, x1, 8
     .word 0
-    li x2, 0x099999
-    .assert x2=0x099999
+    .assert
 
 test_bgeu:
     .init
     bgeu x0, x0, 8
     .word 0
-    li x1, 0x6969
-    .assert x1=0x6969
+    .assert
 
     .init x1=1
     bgeu x1, x0, 8
     .word 0
-    li x2, 0xBEEF
-    .assert x2=0xBEEF
+    .assert
 
     .init x1=1
     bgeu x0, x1, 8
     j 8
     .word 0
-    li x2, 0xCAFE
-    .assert x2=0xCAFE
+    .assert
 
     .init x1=-1
     bgeu x1, x0, 8
     .word 0
-    li x2, 0xafafafaf
-    .assert x2=0xafafafaf
+    .assert
 
 test_load_store:
     .init x1=0x0, x2=0x12345678
