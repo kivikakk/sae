@@ -7,7 +7,7 @@ from amaranth.lib.enum import IntEnum
 from . import rv32
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
                    OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
-                   OpStoreFunct)
+                   OpStoreFunct, OpSystemFunct)
 
 __all__ = [
     "Top",
@@ -395,6 +395,24 @@ class Top(Elaboratable):
                                     ).as_signed()
                                 ),
                             ]
+                        with m.Case(Opcode.SYSTEM):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(0):
+                                    with m.Switch(v_i.imm):
+                                        with m.Case(OpSystemFunct.ECALL >> 3):
+                                            m.d.sync += self.write_xreg(1, 0x1234CAFE)
+                                        with m.Case(OpSystemFunct.EBREAK >> 3):
+                                            m.d.sync += self.xreg[1].eq(0x77774444)
+                                        with m.Default():
+                                            m.d.sync += self.fault(
+                                                FaultCode.ILLEGAL_INSTRUCTION, insn
+                                            )
+                                            m.next = "faulted"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Default():
                             m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
                             m.next = "faulted"

@@ -498,3 +498,18 @@ test_fence:
     lw x1, 0(x0)
     lw x2, 4(x0)
     .assert x1=0x0F20000F, x2=0x8330000F
+
+test_ecall:
+    .init
+    ecall
+    .assert x1=0x1234CAFE
+
+test_ebreak:
+    .init
+    ebreak
+    .assert
+
+    .init
+    li x1, 1
+    ebreak
+    .assert x1=0x77774444

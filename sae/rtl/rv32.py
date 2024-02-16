@@ -15,6 +15,7 @@ __all__ = [
     "OpLoadFunct",
     "OpStoreFunct",
     "OpMiscMemFunct",
+    "OpSystemFunct",
     "InsI",
     "InsU",
     "InsR",
@@ -86,7 +87,7 @@ class OpImmFunct(IntEnum, shape=3):
     SRI = 0b101
 
 
-class OpRegFunct(IntEnum, shape=10):
+class OpRegFunct(IntEnum, shape=3):
     ADDSUB = 0b000
     SLT = 0b010
     SLTU = 0b011
@@ -122,6 +123,11 @@ class OpStoreFunct(IntEnum, shape=3):
 
 class OpMiscMemFunct(IntEnum, shape=3):
     FENCE = 0b000
+
+
+class OpSystemFunct(IntEnum, shape=15):
+    ECALL = 0b000000000000000
+    EBREAK = 0b000000000001000
 
 
 # R:
@@ -242,6 +248,17 @@ def fence(op, pred, succ, *, fm=0):
 
 add_insn("fence", fence)
 add_insn("fence.tso", lambda op: fence(op, "rw", "rw", fm=0b1000))
+
+
+for op in ["ecall", "ebreak"]:
+
+    def f(op):
+        funct = OpSystemFunct[op.upper()]
+        return value(
+            InsI, opcode=Opcode.SYSTEM, rd=0, funct3=funct & 0x7, rs1=0, imm=funct >> 3
+        )
+
+    add_insn(op, f)
 
 
 def li(op, rd, imm):
