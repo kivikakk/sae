@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional
 
 from .. import st
-from . import Top
+from . import FaultCode, Top
 from .rv32 import INSNS, Reg
 from .test_utils import InsnTestHelpers, Unwritten
 
@@ -83,17 +83,19 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                     case st.Pragma(kind="assert", args=args):
                         if self.results is None:
                             self.run_body(self.__reg_inits)
+                            self.assertReg("faultcode", FaultCode.ILLEGAL_INSTRUCTION)
+                            self.assertReg("faultinsn", 0xFFFFFFFF)
                         for assign in args:
-                            assert assign.register.register[0] == "x"
-                            self.assertReg(
-                                int(assign.register.register[1:]), assign.assign
-                            )
+                            reg = assign.register.register
+                            assert reg[0] == "x"
+                            self.assertReg(reg, assign.assign)
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")
+        self.__fish()
 
     def __fish(self):
         if self.results is not None:

@@ -34,6 +34,8 @@ def run_until_fault(top):
         for i in range(1, 32):
             if not top.track_reg_written or (yield top.xreg_written[i]):
                 results[f"x{i}"] = yield top.xreg[i]
+        results["faultcode"] = yield top.fault_code
+        results["faultinsn"] = yield top.fault_insn
 
     sim = Simulator(top)
     sim.add_clock(1e6)
@@ -59,16 +61,19 @@ class InsnTestHelpers:
 
     def run_body(self, regs):
         top = Top(
-            sysmem=Memory(width=16, depth=len(self.body) + 2, init=self.body + [0, 0]),
+            sysmem=Memory(
+                width=16, depth=len(self.body) + 2, init=self.body + [0xFFFF, 0xFFFF]
+            ),
             reg_inits=regs,
             track_reg_written=True,
         )
         self.results = run_until_fault(top)
         self.body = None
-        self.__asserted = set(["pc"])
+        self.__asserted = set(
+            ["pc", "faultcode", "faultinsn"]
+        )  # don't include these in 'rest'
 
-    def assertReg(self, xr, v):
-        rn = f"x{int(xr)}"
+    def assertReg(self, rn, v):
         self.__asserted.add(rn)
         self.assertRegValue(v, self.results.get(rn, Unwritten), rn=rn)
 

@@ -11,12 +11,19 @@ from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
 __all__ = [
     "Top",
     "State",
+    "FaultCode",
 ]
 
 
 class State(IntEnum, shape=1):
     RUNNING = 0
     FAULTED = 1
+
+
+class FaultCode(IntEnum):
+    UNSET = 0
+    ILLEGAL_INSTRUCTION = 1
+    PC_MISALIGNED = 2
 
 
 class LsSize(IntEnum, shape=2):
@@ -37,6 +44,9 @@ class Top(Elaboratable):
     sysmem_wr: WritePort
 
     state: Signal
+    fault_code: Signal
+    fault_insn: Signal
+
     xreg: Array[Signal]
     xreg_written: Optional[Array[Signal]]
     pc: Signal
@@ -54,6 +64,9 @@ class Top(Elaboratable):
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
+        self.fault_code = Signal(FaultCode)
+        self.fault_insn = Signal(self.ILEN)
+
         self.xreg = Array(
             Signal(self.XLEN, reset=self.reg_reset(xn)) for xn in range(32)
         )
@@ -93,6 +106,7 @@ class Top(Elaboratable):
                 m.next = "fetch.init1"
 
                 with m.If(self.pc[:2].any()):
+                    m.d.sync += self.fault(FaultCode.PC_MISALIGNED)
                     m.next = "faulted"
 
             with m.State("fetch.init1"):
@@ -110,6 +124,7 @@ class Top(Elaboratable):
                     (insn[:16] == 0)
                     | (insn[: self.ILEN] == C(1, 1).replicate(self.ILEN))
                 ):
+                    m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
                     m.next = "faulted"
                 with m.Else():
                     v_i = InsI(insn)
@@ -144,6 +159,11 @@ class Top(Elaboratable):
                                         self.ls_size.eq(4),
                                     ]
                                     m.next = "lw.init1"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Case(Opcode.OP_IMM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpImmFunct.ADDI):
@@ -180,6 +200,11 @@ class Top(Elaboratable):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, rs1 >> v_i.imm[:5]
                                     )
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Case(Opcode.OP):
                             with m.Switch(v_r.funct3):
                                 with m.Case(OpRegFunct.ADDSUB):
@@ -228,6 +253,11 @@ class Top(Elaboratable):
                                         )
                                         >> self.xreg[v_r.rs2][:5],
                                     )
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                         with m.Case(Opcode.AUIPC):
@@ -250,6 +280,11 @@ class Top(Elaboratable):
                                         self.ls_reg.eq(v_s.rs2),
                                     ]
                                     m.next = "sw.write1"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Case(Opcode.BRANCH):
                             # TODO: we're meant to raise
                             # instruction-address-misaligned if the target
@@ -283,6 +318,11 @@ class Top(Elaboratable):
                                 with m.Case(OpBranchFunct.BGEU):
                                     with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
                                         m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
                         with m.Case(Opcode.JALR):
                             m.d.sync += [
                                 self.write_xreg(v_i.rd, self.pc + 4),
@@ -296,7 +336,7 @@ class Top(Elaboratable):
                                 self.write_xreg(v_j.rd, self.pc + 4),
                                 self.pc.eq(
                                     self.pc
-                                    + Cat(  # meow :3
+                                    + Cat(  # meow! :|3
                                         C(0, 1),
                                         v_j.imm10_1,
                                         v_j.imm11,
@@ -305,6 +345,9 @@ class Top(Elaboratable):
                                     ).as_signed()
                                 ),
                             ]
+                        with m.Default():
+                            m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
+                            m.next = "faulted"
 
             with m.State("lw.init1"):
                 m.d.sync += self.sysmem_rd.addr.eq(self.sysmem_rd.addr + 1)
@@ -345,5 +388,11 @@ class Top(Elaboratable):
     def write_xreg(self, xn, value):
         assigns = [self.xreg[xn].eq(value)]
         if self.track_reg_written:
-            assigns += [self.xreg_written[xn].eq(1)]
+            assigns.append(self.xreg_written[xn].eq(1))
+        return assigns
+
+    def fault(self, code, insn=None):
+        assigns = [self.fault_code.eq(code)]
+        if insn is not None:
+            assigns.append(self.fault_insn.eq(insn))
         return assigns

@@ -330,7 +330,7 @@ test_sub:
     sub x4, x2, x1
     sub x5, x1, x0
     sub x6, x0, x1
-    .assert x3=-2, x4=2
+    .assert x3=-2, x4=2, x5=3, x6=-3
 
 test_jal:
     .init
