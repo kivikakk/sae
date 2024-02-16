@@ -54,7 +54,7 @@ class Top(Elaboratable):
     partial_read: Signal
 
     ls_reg: Signal
-    ls_size: Signal
+    ls_off: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or Memory(
@@ -78,7 +78,7 @@ class Top(Elaboratable):
         self.partial_read = Signal(16)
 
         self.ls_reg = Signal(range(32))
-        self.ls_size = Signal(LsSize)
+        self.ls_off = Signal()
 
     def reg_reset(self, xn):
         if xn == 0:
@@ -92,7 +92,7 @@ class Top(Elaboratable):
         m = Module()
 
         self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
-        self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port()
+        self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port(granularity=8)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
@@ -146,20 +146,47 @@ class Top(Elaboratable):
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
+                            # Forcibly 16-bit aligned without a raise. Whoops
+                            # XXX
+                            addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
-                                    # Forcibly 16-bit aligned without a raise.
-                                    # Whoops XXX.
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(
-                                            (self.xreg[v_i.rs1] + v_i.imm.as_signed())
-                                            >> 1
-                                        ),
+                                        self.sysmem_rd.addr.eq(addr >> 1),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.ls_size.eq(4),
                                     ]
                                     m.next = "lw.init1"
+                                with m.Case(OpLoadFunct.LH):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        self.ls_reg.eq(v_i.rd),
+                                    ]
+                                    m.next = "lh.delay"
+                                with m.Case(OpLoadFunct.LHU):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        self.ls_reg.eq(v_i.rd),
+                                    ]
+                                    m.next = "lhu.delay"
+                                with m.Case(OpLoadFunct.LB):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        self.ls_reg.eq(v_i.rd),
+                                        self.ls_off.eq(addr[0]),
+                                    ]
+                                    m.next = "lb.delay"
+                                with m.Case(OpLoadFunct.LBU):
+                                    m.d.sync += [
+                                        self.pc.eq(self.pc),
+                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        self.ls_reg.eq(v_i.rd),
+                                        self.ls_off.eq(addr[0]),
+                                    ]
+                                    m.next = "lbu.delay"
                                 with m.Default():
                                     m.d.sync += self.fault(
                                         FaultCode.ILLEGAL_INSTRUCTION, insn
@@ -276,20 +303,33 @@ class Top(Elaboratable):
                             )
                         with m.Case(Opcode.STORE):
                             imm = Cat(v_s.imm4_0, v_s.imm11_5)
+                            addr = self.xreg[v_s.rs1] + imm.as_signed()
                             with m.Switch(v_s.funct3):
                                 with m.Case(OpStoreFunct.SW):
                                     # Forcibly 16-bit aligned without a raise.
                                     # Sorry. XXX
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_wr.addr.eq(
-                                            (self.xreg[v_s.rs1] + imm.as_signed()) >> 1
-                                        ),
+                                        self.sysmem_wr.addr.eq(addr >> 1),
                                         self.sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
-                                        self.sysmem_wr.en.eq(1),
+                                        self.sysmem_wr.en.eq(0b11),
                                         self.ls_reg.eq(v_s.rs2),
                                     ]
                                     m.next = "sw.write1"
+                                with m.Case(OpStoreFunct.SH):
+                                    m.d.sync += [
+                                        self.sysmem_wr.addr.eq(addr >> 1),
+                                        self.sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
+                                        self.sysmem_wr.en.eq(0b11),
+                                    ]
+                                with m.Case(OpStoreFunct.SB):
+                                    m.d.sync += [
+                                        self.sysmem_wr.addr.eq(addr >> 1),
+                                        self.sysmem_wr.data.eq(
+                                            self.xreg[v_s.rs2][:8].replicate(2)
+                                        ),
+                                        self.sysmem_wr.en.eq(Mux(addr[0], 0b10, 0b01)),
+                                    ]
                                 with m.Default():
                                     m.d.sync += self.fault(
                                         FaultCode.ILLEGAL_INSTRUCTION, insn
@@ -368,8 +408,6 @@ class Top(Elaboratable):
                 m.next = "lw.resolve"
 
             with m.State("lw.resolve"):
-                # TODO: honour ls_size
-                # TODO: l[hb]u?
                 data = Cat(self.partial_read, self.sysmem_rd.data)
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
@@ -377,14 +415,57 @@ class Top(Elaboratable):
                 ]
                 m.next = "fetch.init0"
 
+            with m.State("lh.delay"):
+                m.next = "lh.resolve"
+
+            with m.State("lh.resolve"):
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.write_xreg(self.ls_reg, self.sysmem_rd.data.as_signed()),
+                ]
+                m.next = "fetch.init0"
+
+            with m.State("lhu.delay"):
+                m.next = "lhu.resolve"
+
+            with m.State("lhu.resolve"):
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.write_xreg(self.ls_reg, self.sysmem_rd.data),
+                ]
+                m.next = "fetch.init0"
+
+            with m.State("lb.delay"):
+                m.next = "lb.resolve"
+
+            with m.State("lb.resolve"):
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.write_xreg(
+                        self.ls_reg,
+                        self.sysmem_rd.data.word_select(self.ls_off, 8).as_signed(),
+                    ),
+                ]
+                m.next = "fetch.init0"
+
+            with m.State("lbu.delay"):
+                m.next = "lbu.resolve"
+
+            with m.State("lbu.resolve"):
+                m.d.sync += [
+                    self.pc.eq(self.pc + 4),
+                    self.write_xreg(
+                        self.ls_reg, self.sysmem_rd.data.word_select(self.ls_off, 8)
+                    ),
+                ]
+                m.next = "fetch.init0"
+
             with m.State("sw.write1"):
-                # TODO: honour ls_size
-                # TODO: s[hb]
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
                     self.sysmem_wr.addr.eq(self.sysmem_wr.addr + 1),
                     self.sysmem_wr.data.eq(self.xreg[self.ls_reg][16:]),
-                    self.sysmem_wr.en.eq(1),
+                    self.sysmem_wr.en.eq(0b11),
                 ]
                 m.next = "fetch.init0"
 
