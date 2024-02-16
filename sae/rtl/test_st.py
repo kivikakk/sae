@@ -50,11 +50,11 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
     def translate_arg(cls, arg, name):
         if isinstance(arg, st.Register):
             return Reg[f"X{arg.register[1:]}"]
-        elif isinstance(arg, int):
+        elif isinstance(arg, (int, st.Offset)):
             return arg
         elif name in ("pred", "succ"):
             return arg
-        raise RuntimeError("arg weh {name!r} = {arg!r}")
+        raise RuntimeError(f"arg weh {name!r} = {arg!r}")
 
     @translate_arg.register(list)
     def translate_arg_list(cls, args, names):

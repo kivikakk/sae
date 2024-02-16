@@ -14,6 +14,7 @@ tokenize = make_tokenizer(
         TokenSpec("comment", r";.*$"),
         TokenSpec("label", r"\w+:"),
         TokenSpec("pragma", r"\.\w+"),
+        TokenSpec("offset", r"\d+\((x[0-9]|x[12][0-9]|x3[01])\)"),
         TokenSpec("register", "pc|x[0-9]|x[12][0-9]|x3[01]"),
         TokenSpec("word", r"[a-zA-Z][a-zA-Z0-9_.]*"),
         TokenSpec("number", r"(-\s*)?(0[xX][0-9a-fA-F_]+|0[bB][01_]+|[0-9_]+)"),
@@ -48,15 +49,32 @@ class Pragma:
 
 
 @dataclass
+class Offset:
+    offset: int
+    register: Register
+
+
+@dataclass
 class Op:
     opcode: str
-    args: list[Register | int]
+    args: list[Register | Offset | int]
     line: str
     lineno: int
 
 
+import sys
+
+
+def parse_offset(p):
+    imm, rest = p.split("(")
+    imm = int(imm, 0)
+    reg = rest.rstrip(")")
+    return Offset(imm, Register(reg))
+
+
 def parse(tokens, *, line, lineno):
     number = tok("number") >> (lambda n: int(n, 0))
+    offset = tok("offset") >> parse_offset
 
     register = tok("register") >> Register
     assign = -tok("equals") + number
@@ -64,7 +82,7 @@ def parse(tokens, *, line, lineno):
         lambda p: p[0] if p[1] is None else Assign(*p)
     )
 
-    arg = register_or_assign | number | tok("word")
+    arg = number | offset | register_or_assign | tok("word")
     arglist = maybe(arg + many(-tok("comma") + arg)) >> (
         lambda p: [] if not p else [p[0]] + p[1]
     )

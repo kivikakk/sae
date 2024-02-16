@@ -201,7 +201,9 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr", "load"]:
 
 for op in ["lw", "lh", "lhu", "lb", "lbu"]:
 
-    def f(op, rd, rs1, imm):
+    def f(op, rd, rs1off):
+        rs1 = Reg[rs1off.register.register.upper()]
+        imm = rs1off.offset
         return value(
             InsI,
             opcode=Opcode.LOAD,
@@ -303,7 +305,9 @@ class InsS(Struct):
 
 for op in ["sw", "sh", "sb"]:
 
-    def f(op, rs1, rs2, imm):
+    def f(op, rs2, rs1off):
+        rs1 = Reg[rs1off.register.register.upper()]
+        imm = rs1off.offset
         return value(
             InsS,
             opcode=Opcode.STORE,

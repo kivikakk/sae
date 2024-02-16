@@ -460,43 +460,41 @@ test_bgeu:
 
 test_load_store:
     .init x1=0x0, x2=0x12345678
-    sw x1, x2, 0
-    lw x3, x1, 0
+    sw x2, 0(x1)
+    lw x3, 0(x1)
     .assert x3=0x12345678
 
     .init
-    lw x1, x0, 4                ; load *next* instruction
+    lw x1, 4(x0)                ; load *next* instruction
     nop                         ; addi x0, x0, 0 = 0x00000013
-    sw x0, x1, 0
-    ;; sw x7,0(x8) stores x7 contents at *(x8+0)
-    lw x2, x0, 0
-    ;; lw x7,0(x8) reads *(x8+0) and writes to x7
+    sw x1, 0(x0)
+    lw x2, 0(x0)
     .assert x1=0x13, x2=0x13
 
 test_load_store_h:
     .init
     li x1, 0x1234FEDC
-    sw x0, x0, 0                ; &0x00: 00 00  00 00
-    sh x0, x1, 0                ; &0x00: DC FE  00 00
-    lw x2, x0, 0
-    lh x3, x0, 0
-    lhu x4, x0, 0
+    sw x0, 0(x0)                ; &0x00: 00 00  00 00
+    sh x1, 0(x0)                ; &0x00: DC FE  00 00
+    lw x2, 0(x0)
+    lh x3, 0(x0)
+    lhu x4, 0(x0)
     .assert x1=0x1234FEDC, x2=0x0000FEDC, x3=0xFFFFFEDC, x4=0x0000FEDC
 
 test_load_store_b:
     .init
     li x1, 0x1234FEDC
-    sw x0, x0, 0
-    sb x0, x1, 1
-    lhu x2, x0, 0
-    lb x3, x0, 1
-    lbu x4, x0, 1
+    sw x0, 0(x0)
+    sb x1, 1(x0)
+    lhu x2, 0(x0)
+    lb x3, 1(x0)
+    lbu x4, 1(x0)
     .assert x1=0x1234FEDC, x2=0x0000DC00, x3=0xFFFFFFDC, x4=0x000000DC
 
 test_fence:
     .init
     fence iorw, r
     fence.tso                   ; rw, rw
-    lw x1, x0, 0
-    lw x2, x0, 4
+    lw x1, 0(x0)
+    lw x2, 4(x0)
     .assert x1=0x0F20000F, x2=0x8330000F
