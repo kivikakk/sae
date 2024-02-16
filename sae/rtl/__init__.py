@@ -6,7 +6,8 @@ from amaranth.lib.enum import IntEnum
 
 from . import rv32
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
-                   OpImmFunct, OpLoadFunct, OpRegFunct, OpStoreFunct)
+                   OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
+                   OpStoreFunct)
 
 __all__ = [
     "Top",
@@ -159,6 +160,15 @@ class Top(Elaboratable):
                                         self.ls_size.eq(4),
                                     ]
                                     m.next = "lw.init1"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.MISC_MEM):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(OpMiscMemFunct.FENCE):
+                                    pass  # XXX no-op
                                 with m.Default():
                                     m.d.sync += self.fault(
                                         FaultCode.ILLEGAL_INSTRUCTION, insn

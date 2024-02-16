@@ -14,6 +14,7 @@ __all__ = [
     "OpRegFunct",
     "OpLoadFunct",
     "OpStoreFunct",
+    "OpMiscMemFunct",
     "InsI",
     "InsU",
     "InsR",
