@@ -2,9 +2,9 @@
   description = "sae RV32I softcore cpu";
 
   inputs = {
-    rainhdx.url = git+https://hrzn.ee/kivikakk/rainhdx;
-    nixpkgs.follows = "rainhdx/nixpkgs";
-    flake-utils.follows = "rainhdx/flake-utils";
+    hdx.url = git+https://hrzn.ee/kivikakk/hdx;
+    nixpkgs.follows = "hdx/nixpkgs";
+    flake-utils.follows = "hdx/flake-utils";
   };
 
   outputs = inputs @ {
@@ -15,15 +15,18 @@
   }:
     flake-utils.lib.eachDefaultSystem (system: let
       pkgs = import nixpkgs {inherit system;};
-      rainhdx = inputs.rainhdx.packages.${system}.default;
-    in {
+      inherit (inputs.hdx.packages.${system}) rainhdx;
+      inherit (rainhdx) python;
+    in rec {
       formatter = pkgs.alejandra;
 
-      packages.default = rainhdx.buildRainProject {
+      packages.default = rainhdx.buildProject {
         name = "sae";
         src = ./.;
 
-        nativeBuildInputs = [rainhdx.python.pkgs.funcparserlib];
+        nativeBuildInputs = [python.pkgs.funcparserlib];
       };
+
+      devShells = packages.default.devShells;
     });
 }
