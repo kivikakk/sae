@@ -102,7 +102,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                             )
                         for reg, assign in asserts.items():
                             assert reg[0] == "x"
-                            self.assertReg(reg, assign)
+                            self.assertReg(Reg[reg.upper()], assign)
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)

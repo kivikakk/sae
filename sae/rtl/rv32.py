@@ -1,7 +1,7 @@
 import re
 from functools import partial
 
-from amaranth import Memory, unsigned
+from amaranth import unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import IntEnum
 
@@ -45,11 +45,69 @@ def value(struct, **kwargs):
     ]
 
 
+REG_MAPPINGS = [
+    # x0-x4
+    "zero",
+    "ra",
+    "sp",
+    "gp",
+    "tp",
+    # x5-x7
+    "t0",
+    "t1",
+    "t2",
+    # x8-x9
+    "fp",
+    "s1",  # s0=fp
+    # x10-x17
+    "a0",
+    "a1",
+    "a2",
+    "a3",
+    "a4",
+    "a5",
+    "a6",
+    "a7",
+    # x18-x27
+    "s2",
+    "s3",
+    "s4",
+    "s5",
+    "s6",
+    "s7",
+    "s8",
+    "s9",
+    "s10",
+    "s11",
+    # x28-x31
+    "t3",
+    "t4",
+    "t5",
+    "t6",
+]
+
+
 class Reg(IntEnum, shape=5):
     # X0..X31 = 0..31
     global i
     for i in range(32):
         locals()[f"X{i}"] = i
+
+    @classmethod
+    def _missing_(cls, value):
+        try:
+            ix = REG_MAPPINGS.index(value.lower())
+        except ValueError:
+            return None
+        else:
+            return cls[f"X{ix}"]
+
+
+def reg_friendly(self):
+    return REG_MAPPINGS[self]
+
+
+Reg.friendly = property(reg_friendly)
 
 
 class Opcode(IntEnum, shape=7):

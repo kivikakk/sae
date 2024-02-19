@@ -2,6 +2,7 @@ from amaranth import Memory
 from amaranth.sim import Simulator, Tick
 
 from . import State, Top
+from .rv32 import Reg
 
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
@@ -13,6 +14,7 @@ def run_until_fault(top):
         nonlocal results
         first = True
         pc = None
+        written = set()
         print()
         while State.RUNNING == (yield top.state):
             if first:
@@ -21,19 +23,23 @@ def run_until_fault(top):
                 yield Tick()
             last_pc, pc = pc, (yield top.pc)
             if pc != last_pc:
-                print(f"pc={pc:08x}  ", end="")
-                for i in range(1, 6):
-                    print(f"  x{i}={(yield top.xreg[i]):08x}", end="")
-                print("    mem=", end="")
+                print(f"pc={pc:08x}   mem=", end="")
                 for i in range(8):
                     v = yield top.sysmem[i]
                     print(f"{v:0>4x} ", end="")
-                print("...")
+
+                for i in range(1, 32):
+                    v = yield top.xreg[i]
+                    if i in written or v:
+                        written.add(i)
+                        rn = Reg[f"X{i}"].friendly
+                        print(f"  x{i}/{rn}={(yield top.xreg[i]):08x}", end="")
+                print()
 
         results["pc"] = yield top.pc
         for i in range(1, 32):
             if not top.track_reg_written or (yield top.xreg_written[i]):
-                results[f"x{i}"] = yield top.xreg[i]
+                results[Reg[f"X{i}"]] = yield top.xreg[i]
         results["faultcode"] = yield top.fault_code
         results["faultinsn"] = yield top.fault_insn
 
