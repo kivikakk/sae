@@ -22,18 +22,6 @@ build = [
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
-[[tool.mypy.overrides]]
-module = "amaranth.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "amaranth_boards.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "rainhdx.*"
-ignore_missing_imports = true
-
-[[tool.mypy.overrides]]
-module = "funcparserlib.*"
+[tool.mypy]
+disable_error_code = ["valid-type"]
 ignore_missing_imports = true

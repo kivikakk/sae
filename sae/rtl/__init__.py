@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-class State(IntEnum, shape=1):
+class State(IntEnum, shape=1):  # type: ignore
     RUNNING = 0
     FAULTED = 1
 
@@ -30,7 +30,7 @@ class FaultCode(IntEnum):
     PC_MISALIGNED = 2
 
 
-class LsSize(IntEnum, shape=2):
+class LsSize(IntEnum, shape=2):  # type: ignore
     B = 0
     H = 1
     W = 2
