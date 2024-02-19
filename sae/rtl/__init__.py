@@ -62,9 +62,7 @@ class Top(Elaboratable):
         if sysmem is not None:
             self.sysmem = sysmem
         else:
-            with open(
-                Path(__file__).parent.parent.parent / "lluvia" / "test", "rb"
-            ) as f:
+            with open(Path(__file__).parent / "test_shrimple.bin", "rb") as f:
                 b = f.read()
 
             init = []

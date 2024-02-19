@@ -1,11 +1,17 @@
 CFLAGS = -march=rv32i -mabi=ilp32
 
-test: test.o
+TARGETS = shrimple.bin
+
+all: ../sae/rtl/test_shrimple.bin
+
+../sae/rtl/test_shrimple.bin: shrimple.bin
+	cp $< $@
+
+%.bin: %.o
 	riscv32-none-elf-objcopy -O binary $< $@
 
-test.o: test.c
-
+.PRECIOUS: %.o
 
 .PHONY: clean
 clean:
-	-rm test test.o
+	-rm *.bin *.o
