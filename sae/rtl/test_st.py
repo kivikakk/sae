@@ -1,4 +1,5 @@
 import inspect
+import re
 import unittest
 from contextlib import contextmanager
 from functools import singledispatchmethod
@@ -42,8 +43,8 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
             parser.feed(f.readlines())
 
         for name, body in parser.results:
-            name = f"test_st_{name}"
-            setattr(cls, name, lambda self, body=body: cls.run_st(self, body))
+            if name.startswith("test_"):
+                setattr(cls, name, lambda self, body=body: cls.run_st(self, body))
 
     @singledispatchmethod
     @classmethod
@@ -115,8 +116,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
             self.assertRegRest(Unwritten)
 
 
-print(list(Path(__file__).parent.glob("*.st")))
-
-
-class TestSemanticsSt(StTestCase):
-    filename = "test_semantics.st"
+TEST_REPLACEMENT = re.compile(r"(?:\A|[^a-zA-Z]+)[a-zA-Z]")
+for test_file in Path(__file__).parent.glob("test_*.st"):
+    name = TEST_REPLACEMENT.sub(lambda t: t[0][-1].upper(), Path(test_file).name)
+    globals()[name] = type(StTestCase)(name, (StTestCase,), {"filename": test_file})  # type: ignore
