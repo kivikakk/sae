@@ -1,3 +1,5 @@
+from itertools import islice
+from pathlib import Path
 from typing import Optional
 
 from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Signal, signed
@@ -57,16 +59,28 @@ class Top(Elaboratable):
     ls_off: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
-        init = [
-            *rv32.Li(rv32.Reg.X1, 0x1234CAFE),
-            *rv32.Sw(rv32.Reg.X1, (0, rv32.Reg.X0)),
-            0,
-        ]
-        self.sysmem = sysmem or Memory(
-            width=16,
-            depth=1024,
-            init=init,
-        )
+        if sysmem is not None:
+            self.sysmem = sysmem
+        else:
+            with open(
+                Path(__file__).parent.parent.parent / "lluvia" / "test", "rb"
+            ) as f:
+                b = f.read()
+
+            init = []
+            it = iter(b)
+            while batch := tuple(islice(it, 2)):
+                match batch:
+                    case [a, b]:
+                        init.append((b << 8) | a)
+                    case [e]:
+                        init.append(e)
+
+            self.sysmem = Memory(
+                width=16,
+                depth=4096,
+                init=init,
+            )
         self.reg_inits = reg_inits
         self.track_reg_written = track_reg_written
 
