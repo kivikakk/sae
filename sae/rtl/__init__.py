@@ -10,6 +10,7 @@ from . import rv32
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
                    OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
                    OpStoreFunct, OpSystemFunct)
+from .uart import UART
 
 __all__ = [
     "Top",
@@ -38,6 +39,7 @@ class LsSize(IntEnum, shape=2):
 class Top(Elaboratable):
     ILEN = 32
     XLEN = 32
+    XCOUNT = 32
 
     sysmem: Memory
     reg_inits: Optional[dict[str, int]]
@@ -87,15 +89,15 @@ class Top(Elaboratable):
         self.fault_insn = Signal(self.ILEN)
 
         self.xreg = Array(
-            Signal(self.XLEN, init=self.reg_reset(xn)) for xn in range(32)
+            Signal(self.XLEN, init=self.reg_reset(xn)) for xn in range(self.XCOUNT)
         )
         if self.track_reg_written:
-            self.xreg_written = Array(Signal() for _ in range(32))
+            self.xreg_written = Array(Signal() for _ in range(self.XCOUNT))
 
         self.pc = Signal(self.XLEN)
-        self.partial_read = Signal(32)
+        self.partial_read = Signal(self.ILEN)
 
-        self.ls_reg = Signal(range(32))
+        self.ls_reg = Signal(range(self.XCOUNT))
         self.ls_off = Signal()
 
     def reg_reset(self, xn):
@@ -107,7 +109,17 @@ class Top(Elaboratable):
         return v
 
     def elaborate(self, platform):
+        from .. import icebreaker
+
         m = Module()
+
+        match platform:
+            case icebreaker():
+                plat_uart = platform.request("uart")
+                uart = m.submodules.uart = UART(plat_uart)
+
+            case None:
+                uart = None
 
         self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
         self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port(granularity=8)
@@ -145,12 +157,10 @@ class Top(Elaboratable):
             with m.State("fetch.resolve"):
                 insn = self.partial_read
                 assert len(insn) == self.ILEN
-                with m.If(
-                    (insn[:16] == 0)
-                    | (insn[: self.ILEN] == C(1, 1).replicate(self.ILEN))
-                ):
+                with m.If((insn[:16] == 0) | (insn == C(1, 1).replicate(self.ILEN))):
                     m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
                     m.next = "faulted"
+
                 with m.Else():
                     v_i = InsI(insn)
                     v_u = InsU(insn)
@@ -167,6 +177,17 @@ class Top(Elaboratable):
                     # overridden, set x0 after so it remains zero (lol).
                     m.next = "fetch.init0"
                     m.d.sync += self.pc.eq(self.pc + 4)
+
+                    if uart:
+                        last_x10 = Signal.like(self.xreg[0])
+                        m.d.sync += last_x10.eq(self.xreg[10])
+                        with m.If(self.xreg[10] != last_x10):
+                            m.d.sync += [
+                                uart.wr_data.eq(self.xreg[10]),
+                                uart.wr_en.eq(1),
+                            ]
+                        with m.Else():
+                            m.d.sync += uart.wr_en.eq(0)
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
