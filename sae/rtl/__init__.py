@@ -75,6 +75,8 @@ class Top(Elaboratable):
                         init.append((b << 8) | a)
                     case [e]:
                         init.append(e)
+                    case _:
+                        raise RuntimeError("!?")
 
             self.sysmem = Memory(
                 width=16,
@@ -103,7 +105,12 @@ class Top(Elaboratable):
     def reg_reset(self, xn):
         if xn == 0:
             return 0
-        v = (self.reg_inits or {}).get(f"x{xn}", 0)
+        if init := (self.reg_inits or {}).get(f"x{xn}"):
+            v = init
+        elif xn == 2:  # SP
+            v = (self.sysmem.width // 8) * self.sysmem.depth
+        else:
+            v = 0
         if v < 0:
             v += 2**self.XLEN
         return v
@@ -118,7 +125,7 @@ class Top(Elaboratable):
                 plat_uart = platform.request("uart")
                 uart = m.submodules.uart = UART(plat_uart)
 
-            case None:
+            case _:
                 uart = None
 
         self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
@@ -150,7 +157,9 @@ class Top(Elaboratable):
 
             with m.State("fetch.cat"):
                 m.d.sync += self.partial_read.eq(
-                    Cat(self.partial_read[:16], self.sysmem_rd.data)
+                    Cat(  # maaaaoooowwwwwww :3
+                        self.partial_read[:16], self.sysmem_rd.data
+                    )
                 )
                 m.next = "fetch.resolve"
 

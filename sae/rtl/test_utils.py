@@ -24,7 +24,7 @@ def run_until_fault(top):
             last_pc, pc = pc, (yield top.pc)
             if pc != last_pc:
                 print(f"pc={pc:08x}   mem=", end="")
-                for i in range(8):
+                for i in range(5):
                     v = yield top.sysmem[i]
                     print(f"{v:0>4x} ", end="")
 
@@ -33,7 +33,7 @@ def run_until_fault(top):
                     if i in written or v:
                         written.add(i)
                         rn = Reg[f"X{i}"].friendly
-                        print(f"  x{i}/{rn}={(yield top.xreg[i]):08x}", end="")
+                        print(f"  {rn}={(yield top.xreg[i]):08x}", end="")
                 print()
 
         results["pc"] = yield top.pc
