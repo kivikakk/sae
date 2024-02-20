@@ -1,4 +1,5 @@
 import unittest
+from pathlib import Path
 
 from amaranth import Memory
 
@@ -9,9 +10,12 @@ from .test_utils import run_until_fault
 
 class TestTop(unittest.TestCase):
     def test_top(self):
-        run_until_fault(Top(sysmem=Memory(width=16, depth=1, init=[0xFFFF])))
+        run_until_fault([0xFFFF])
 
     def test_lluvia(self):
-        results = run_until_fault(Top(reg_inits={"x1": 0xFFFF_FFFF}))
+        results = run_until_fault(
+            Path(__file__).parent / "test_shrimple.bin",
+            reg_inits={"x1": 0xFFFF_FFFF},
+        )
         self.assertEqual(FaultCode.PC_MISALIGNED, results["faultcode"])
         self.assertEqual(123, results[Reg("A0")])

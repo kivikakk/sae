@@ -1,3 +1,6 @@
+from functools import singledispatch
+from pathlib import Path
+
 from amaranth import Memory
 from amaranth.sim import Simulator, Tick
 
@@ -7,6 +10,7 @@ from .rv32 import Reg
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
 
+@singledispatch
 def run_until_fault(top):
     results = {}
 
@@ -24,7 +28,7 @@ def run_until_fault(top):
             last_pc, pc = pc, (yield top.pc)
             if pc != last_pc:
                 print(f"pc={pc:08x}   mem=", end="")
-                for i in range(5):
+                for i in range(min(top.sysmem.depth, 5)):
                     v = yield top.sysmem[i]
                     print(f"{v:0>4x} ", end="")
 
@@ -49,6 +53,18 @@ def run_until_fault(top):
     sim.run()
 
     return results
+
+
+@run_until_fault.register(Path)
+def run_until_fault_bin(path, *, memory=8192, **kwargs):
+    return run_until_fault(Top(sysmem=Top.sysmem_for(path, memory=memory), **kwargs))
+
+
+@run_until_fault.register(list)
+def run_until_fault_por(mem, **kwargs):
+    return run_until_fault(
+        Top(sysmem=Memory(width=16, depth=len(mem), init=mem), **kwargs)
+    )
 
 
 class UnwrittenClass:

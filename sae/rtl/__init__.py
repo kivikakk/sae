@@ -61,29 +61,10 @@ class Top(Elaboratable):
     ls_off: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
-        if sysmem is not None:
-            self.sysmem = sysmem
-        else:
-            with open(Path(__file__).parent / "test_shrimple.bin", "rb") as f:
-                b = f.read()
-
-            init = []
-            it = iter(b)
-            while batch := tuple(islice(it, 2)):
-                match batch:
-                    case [a, b]:
-                        init.append((b << 8) | a)
-                    case [e]:
-                        init.append(e)
-                    case _:
-                        raise RuntimeError("!?")
-
-            self.sysmem = Memory(
-                width=16,
-                depth=4096,
-                init=init,
-            )
-        self.reg_inits = reg_inits
+        self.sysmem = sysmem or self.sysmem_for(
+            Path(__file__).parent / "test_shrimple.bin", memory=8192
+        )
+        self.reg_inits = reg_inits or {}
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
@@ -102,10 +83,31 @@ class Top(Elaboratable):
         self.ls_reg = Signal(range(self.XCOUNT))
         self.ls_off = Signal()
 
+    @staticmethod
+    def sysmem_for(path, *, memory):
+        inp = path.read_bytes()
+
+        init = []
+        it = iter(inp)
+        while batch := tuple(islice(it, 2)):
+            match batch:
+                case [a, b]:
+                    init.append((b << 8) | a)
+                case [e]:
+                    init.append(e)
+                case _:
+                    raise RuntimeError("!?")
+
+        return Memory(
+            width=16,
+            depth=memory // 2,
+            init=init,
+        )
+
     def reg_reset(self, xn):
         if xn == 0:
             return 0
-        if init := (self.reg_inits or {}).get(f"x{xn}"):
+        if init := self.reg_inits.get(f"x{xn}"):
             v = init
         elif xn == 2:  # SP
             v = (self.sysmem.width // 8) * self.sysmem.depth
