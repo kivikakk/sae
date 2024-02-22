@@ -20,11 +20,11 @@
     "amaranth": {
       "flake": false,
       "locked": {
-        "lastModified": 1708121010,
-        "narHash": "sha256-bLuy8hyYWJbLIDVQL/QqHWozEJbDohO18fsbIV8uZxc=",
+        "lastModified": 1708383982,
+        "narHash": "sha256-cfcgHySgF7qn07xCTLSmZb5yJFZfrmocmy4IE9lMvEU=",
         "owner": "amaranth-lang",
         "repo": "amaranth",
-        "rev": "188eb8d4531e18602fd2886dde6d534abdb8bbe8",
+        "rev": "c40cfc9fb56e51d3b3fd96e3ccfb296d57e75456",
         "type": "github"
       },
       "original": {
@@ -94,11 +94,11 @@
         "yosys": "yosys"
       },
       "locked": {
-        "lastModified": 1708324825,
-        "narHash": "sha256-iHGAL3Wj+cw4Ex7pe8pTeUJ4qLBt1J2nn35N+Hzli64=",
+        "lastModified": 1708575425,
+        "narHash": "sha256-Yz4NVSfw1uR4TQ+TnNoGLwOlO0tEviqCvTUsKF1H3Ts=",
         "ref": "refs/heads/main",
-        "rev": "46d62240efc8e53968b2fc1c648604042edf05b9",
-        "revCount": 136,
+        "rev": "da99bdd2a96253f743ae39807d4b383f9868bc05",
+        "revCount": 138,
         "type": "git",
         "url": "https://hrzn.ee/kivikakk/hdx"
       },
@@ -154,11 +154,11 @@
     "yosys": {
       "flake": false,
       "locked": {
-        "lastModified": 1708128942,
-        "narHash": "sha256-31qw622Fqvaq0LtxjdfwL1sB1EHUoRX0doqrUdI0Uv4=",
+        "lastModified": 1708560936,
+        "narHash": "sha256-dYvIaZdoOiV/eeu36bIqMCslVc25MNB5X1CwQdALT/o=",
         "owner": "YosysHQ",
         "repo": "yosys",
-        "rev": "f8d4d7128cf72456cc03b0738a8651ac5dbe52e1",
+        "rev": "84116c9a38546d549c9b122983441d69544854ab",
         "type": "github"
       },
       "original": {
