@@ -115,10 +115,8 @@ class TestMMUWrite(unittest.TestCase, TestBase):
         self.simTestbench(bench, imem)
 
     def test_simple(self):
-        mem = [0, 0]
-        self.assertWrite(mem, 2, AccessWidth.BYTE, 0xAAAAAAAA, [0x0000, 0x00AA])
-        self.assertWrite(mem, 3, AccessWidth.BYTE, 0xAAAAAAAA, [0x0000, 0xAA00])
-
-        mem = [0, 0, 0]
-        self.assertWrite(mem, 2, AccessWidth.HALF, 0xAAAAAAAA, [0x0000, 0xAAAA, 0x0000])
-        self.assertWrite(mem, 3, AccessWidth.HALF, 0xAAAAAAAA, [0x0000, 0xAA00, 0x00AA])
+        mem = [0xABCD, 0xEFFE]
+        self.assertWrite(mem, 2, AccessWidth.BYTE, 0x12345678, [0xABCD, 0xEF78])
+        self.assertWrite(mem, 3, AccessWidth.BYTE, 0x12345678, [0xABCD, 0x78FE])
+        self.assertWrite(mem, 2, AccessWidth.HALF, 0x12345678, [0xABCD, 0x5678])
+        self.assertWrite(mem, 3, AccessWidth.HALF, 0x12345678, [0xAB56, 0x78FE])
