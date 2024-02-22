@@ -37,14 +37,35 @@ class TestMMURead(unittest.TestCase, TestBase):
         sim.add_testbench(partial(bench, mr))
         sim.run()
 
-    def test_simple(self):
-        def bench(mr):
-            self.assertEqual(0, (yield mr.addr))
-            self.assertEqual(AccessWidth.BYTE, (yield mr.width))
-            yield from self.waitFor(mr.valid, change_to=1, ticks=3)
-            self.assertEqual(0x34, (yield mr.value))
+    def assertRead(self, addr, width, value, mem):
+        ticks = 3
+        if addr & 1 and width != AccessWidth.BYTE:
+            ticks += 1
+        if width == AccessWidth.WORD:
+            ticks += 1
 
-        self.simTestbench(bench, [0x1234, 0xABCD])
+        def bench(mr):
+            yield mr.addr.eq(addr)
+            yield mr.width.eq(width)
+            yield from self.waitFor(mr.valid, change_to=1, ticks=ticks)
+            self.assertEqual(value, (yield mr.value))
+
+        self.simTestbench(bench, mem)
+
+    def test_simple(self):
+        mem = [0x1234, 0xABCD]
+        self.assertRead(0x00, AccessWidth.BYTE, 0x34, mem)
+        self.assertRead(0x01, AccessWidth.BYTE, 0x12, mem)
+        self.assertRead(0x02, AccessWidth.BYTE, 0xCD, mem)
+        self.assertRead(0x03, AccessWidth.BYTE, 0xAB, mem)
+        self.assertRead(0x00, AccessWidth.HALF, 0x1234, mem)
+        self.assertRead(0x01, AccessWidth.HALF, 0xCD12, mem)
+        self.assertRead(0x02, AccessWidth.HALF, 0xABCD, mem)
+        self.assertRead(0x03, AccessWidth.HALF, 0x34AB, mem)
+        self.assertRead(0x00, AccessWidth.WORD, 0xABCD1234, mem)
+        self.assertRead(0x01, AccessWidth.WORD, 0x34ABCD12, mem)
+        self.assertRead(0x02, AccessWidth.WORD, 0x1234ABCD, mem)
+        self.assertRead(0x03, AccessWidth.WORD, 0xCD1234AB, mem)
 
     def test_rejig(self):
         def bench(mr):
@@ -52,7 +73,11 @@ class TestMMURead(unittest.TestCase, TestBase):
             self.assertEqual(AccessWidth.BYTE, (yield mr.width))
             yield mr.width.eq(AccessWidth.WORD)
             yield from self.waitFor(mr.valid, change_to=1, ticks=6)
-            self.assertEqual(0xABCD1234, (yield mr.value))
+            self.assertEqual(
+                0xABCD1234,
+                (yield mr.value),
+                f"wanted 0xABCD1234, got {(yield mr.value):x}",
+            )
 
         self.simTestbench(bench, [0x1234, 0xABCD, 0x5678, 0xEF01])
 
@@ -73,9 +98,9 @@ class TestMMUWrite(unittest.TestCase, TestBase):
             self.assertTrue((yield mw.rdy))
             yield mw.ack.eq(1)
             yield Tick()
-            self.assertFalse((yield mw.rdy))
+            self.assertTrue((yield mw.rdy))
             yield mw.ack.eq(0)
-            yield from self.waitFor(mw.rdy, change_to=1, ticks=1)
+            yield Tick()
             self.assertEqual(0xAA, (yield mw.sysmem[0]))
 
         self.simTestbench(bench, [0x0000, 0x0000])
@@ -88,9 +113,42 @@ class TestMMUWrite(unittest.TestCase, TestBase):
             self.assertTrue((yield mw.rdy))
             yield mw.ack.eq(1)
             yield Tick()
-            self.assertFalse((yield mw.rdy))
+            self.assertTrue((yield mw.rdy))
             yield mw.ack.eq(0)
-            yield from self.waitFor(mw.rdy, change_to=1, ticks=1)
+            yield Tick()
             self.assertEqual(0xAA00, (yield mw.sysmem[0]))
 
         self.simTestbench(bench, [0x0000, 0x0000])
+
+    def test_16(self):
+        def bench(mw):
+            yield mw.width.eq(AccessWidth.HALF)
+            yield mw.addr.eq(0)
+            yield mw.data.eq(0xAAAAAAAA)
+            self.assertTrue((yield mw.rdy))
+            yield mw.ack.eq(1)
+            yield Tick()
+            self.assertTrue((yield mw.rdy))
+            yield mw.ack.eq(0)
+            yield Tick()
+            self.assertEqual(0xAAAA, (yield mw.sysmem[0]))
+
+        self.simTestbench(bench, [0x0000, 0x0000])
+
+    def test_16_off(self):
+        def bench(mw):
+            yield mw.width.eq(AccessWidth.HALF)
+            yield mw.addr.eq(3)
+            yield mw.data.eq(0xAAAAAAAA)
+            self.assertTrue((yield mw.rdy))
+            yield mw.ack.eq(1)
+            yield Tick()
+            self.assertFalse((yield mw.rdy))
+            yield mw.ack.eq(0)
+            yield Tick()
+            self.assertTrue((yield mw.rdy))
+            self.assertEqual(0x0000, (yield mw.sysmem[0]))
+            self.assertEqual(0xAA00, (yield mw.sysmem[1]))
+            self.assertEqual(0x00AA, (yield mw.sysmem[2]))
+
+        self.simTestbench(bench, [0x0000, 0x0000, 0x0000])

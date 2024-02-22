@@ -1,4 +1,4 @@
-from amaranth import Module, Mux, Shape, Signal
+from amaranth import Cat, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 from amaranth.lib.wiring import Component, In, Out, Signature, connect, flipped
@@ -157,7 +157,7 @@ class MMURead(Component):
                     m.next = "init"
                 with m.Else():
                     # unaligned word
-                    m.d.sync += self.value.eq(self.value[:8] | (sysmem_rd.data << 8))
+                    m.d.sync += self.value.eq(self.value[8:] | (sysmem_rd.data << 8))
                     m.next = "coll2"
 
             with m.State("coll2"):
@@ -186,19 +186,41 @@ class MMUWrite(Component):
 
         with m.FSM():
             with m.State("init"):
+                m.d.sync += sysmem_wr.en.eq(0)
+
                 m.d.comb += self.rdy.eq(1)
 
                 with m.If(self.ack):
-                    # byte
-                    m.d.sync += [
-                        sysmem_wr.addr.eq(self.addr >> 1),
-                        sysmem_wr.data.eq(self.data[:8].replicate(2)),
-                        sysmem_wr.en.eq(Mux(self.addr[0], 0b10, 0b01)),
-                    ]
-                    m.next = "unstb"
+                    with m.Switch(self.width):
+                        with m.Case(AccessWidth.BYTE):
+                            m.d.sync += [
+                                sysmem_wr.addr.eq(self.addr >> 1),
+                                sysmem_wr.data.eq(self.data[:8].replicate(2)),
+                                sysmem_wr.en.eq(Mux(self.addr[0], 0b10, 0b01)),
+                            ]
 
-            with m.State("unstb"):
-                m.d.sync += sysmem_wr.en.eq(0)
+                        with m.Case(AccessWidth.HALF):
+                            m.d.sync += sysmem_wr.addr.eq(self.addr >> 1)
+                            with m.If(~self.addr[0]):
+                                m.d.sync += [
+                                    sysmem_wr.data.eq(self.data[:16]),
+                                    sysmem_wr.en.eq(0b11),
+                                ]
+                            with m.Else():
+                                # unaligned
+                                m.d.sync += [
+                                    sysmem_wr.data.eq(
+                                        Cat(self.data[8:16], self.data[:8])
+                                    ),
+                                    sysmem_wr.en.eq(0b10),
+                                ]
+                                m.next = "unaligned"
+
+            with m.State("unaligned"):
+                m.d.sync += [
+                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.en.eq(0b01),
+                ]
                 m.next = "init"
 
         return m
