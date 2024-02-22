@@ -2,11 +2,13 @@ from itertools import islice
 from pathlib import Path
 from typing import Optional
 
-from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Signal, signed
-from amaranth.hdl import Memory, ReadPort, WritePort
+from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal,
+                      signed)
 from amaranth.lib.enum import IntEnum
+from amaranth.lib.memory import Memory, ReadPort, WritePort
 
 from . import rv32
+from .mmu import MMU, AccessWidth
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
                    OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
                    OpStoreFunct, OpSystemFunct)
@@ -98,11 +100,7 @@ class Top(Elaboratable):
                 case _:
                     raise RuntimeError("!?")
 
-        return Memory(
-            width=16,
-            depth=memory // 2,
-            init=init,
-        )
+        return Memory(depth=memory // 2, shape=16, init=init)
 
     def reg_reset(self, xn):
         if xn == 0:
@@ -110,7 +108,7 @@ class Top(Elaboratable):
         if init := self.reg_inits.get(f"x{xn}"):
             v = init
         elif xn == 2:  # SP
-            v = (self.sysmem.width // 8) * self.sysmem.depth
+            v = (Shape.cast(self.sysmem.shape).width // 8) * self.sysmem.depth
         else:
             v = 0
         if v < 0:
@@ -130,40 +128,31 @@ class Top(Elaboratable):
             case _:
                 uart = None
 
-        self.sysmem_rd = m.submodules.sysmem_rd = self.sysmem.read_port()
-        self.sysmem_wr = m.submodules.sysmem_wr = self.sysmem.write_port(granularity=8)
+        sysmem = m.submodules.sysmem = self.sysmem
+        mmu = m.submodules.mmu = MMU(sysmem)
+        sysmem_wr = sysmem.write_port(granularity=8)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
         with m.FSM():
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
-            with m.State("fetch.init0"):
+            with m.State("fetch.init"):
                 m.d.sync += [
-                    self.sysmem_rd.addr.eq(self.pc >> 1),
-                    self.sysmem_wr.en.eq(0),
+                    mmu.read.addr.eq(self.pc),
+                    mmu.read.width.eq(AccessWidth.WORD),
+                    # mmu.ack.eq(0),
                 ]
-                m.next = "fetch.init1"
+                m.next = "fetch.wait"
 
                 with m.If(self.pc[:2].any()):
                     m.d.sync += self.fault(FaultCode.PC_MISALIGNED)
                     m.next = "faulted"
 
-            with m.State("fetch.init1"):
-                m.d.sync += self.sysmem_rd.addr.eq((self.pc >> 1) | 0b1)
-                m.next = "fetch.read0"
-
-            with m.State("fetch.read0"):
-                m.d.sync += self.partial_read.eq(self.sysmem_rd.data)
-                m.next = "fetch.cat"
-
-            with m.State("fetch.cat"):
-                m.d.sync += self.partial_read.eq(
-                    Cat(  # maaaaoooowwwwwww :3
-                        self.partial_read[:16], self.sysmem_rd.data
-                    )
-                )
-                m.next = "fetch.resolve"
+            with m.State("fetch.wait"):
+                with m.If(mmu.read.valid):
+                    m.d.sync += self.partial_read.eq(mmu.read.value)
+                    m.next = "fetch.resolve"
 
             with m.State("fetch.resolve"):
                 insn = self.partial_read
@@ -186,7 +175,7 @@ class Top(Elaboratable):
 
                     # set pc/next before processing opcode so they can be
                     # overridden, set x0 after so it remains zero (lol).
-                    m.next = "fetch.init0"
+                    m.next = "fetch.init"
                     m.d.sync += self.pc.eq(self.pc + 4)
 
                     if uart:
@@ -209,36 +198,43 @@ class Top(Elaboratable):
                                 with m.Case(OpLoadFunct.LW):
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        mmu.read.addr.eq(addr),
+                                        mmu.read.width.eq(AccessWidth.WORD),
                                         self.ls_reg.eq(v_i.rd),
                                     ]
-                                    m.next = "lw.init1"
+                                    m.next = "lw.delay"
                                 with m.Case(OpLoadFunct.LH):
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        mmu.read.addr.eq(addr),
+                                        mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lh.delay"
                                 with m.Case(OpLoadFunct.LHU):
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        mmu.read.addr.eq(addr),
+                                        mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lhu.delay"
                                 with m.Case(OpLoadFunct.LB):
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        mmu.read.addr.eq(addr),
+                                        mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.ls_off.eq(addr[0]),
+                                        self.ls_off.eq(
+                                            addr[0]
+                                        ),  # XXX redundant: read back from mmu.read.addr.
                                     ]
                                     m.next = "lb.delay"
                                 with m.Case(OpLoadFunct.LBU):
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_rd.addr.eq(addr >> 1),
+                                        mmu.read.addr.eq(addr),
+                                        mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
                                         self.ls_off.eq(addr[0]),
                                     ]
@@ -366,25 +362,25 @@ class Top(Elaboratable):
                                     # Sorry. XXX
                                     m.d.sync += [
                                         self.pc.eq(self.pc),
-                                        self.sysmem_wr.addr.eq(addr >> 1),
-                                        self.sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
-                                        self.sysmem_wr.en.eq(0b11),
+                                        sysmem_wr.addr.eq(addr >> 1),
+                                        sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
+                                        sysmem_wr.en.eq(0b11),
                                         self.ls_reg.eq(v_s.rs2),
                                     ]
                                     m.next = "sw.write1"
                                 with m.Case(OpStoreFunct.SH):
                                     m.d.sync += [
-                                        self.sysmem_wr.addr.eq(addr >> 1),
-                                        self.sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
-                                        self.sysmem_wr.en.eq(0b11),
+                                        sysmem_wr.addr.eq(addr >> 1),
+                                        sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
+                                        sysmem_wr.en.eq(0b11),
                                     ]
                                 with m.Case(OpStoreFunct.SB):
                                     m.d.sync += [
-                                        self.sysmem_wr.addr.eq(addr >> 1),
-                                        self.sysmem_wr.data.eq(
+                                        sysmem_wr.addr.eq(addr >> 1),
+                                        sysmem_wr.data.eq(
                                             self.xreg[v_s.rs2][:8].replicate(2)
                                         ),
-                                        self.sysmem_wr.en.eq(Mux(addr[0], 0b10, 0b01)),
+                                        sysmem_wr.en.eq(Mux(addr[0], 0b10, 0b01)),
                                     ]
                                 with m.Default():
                                     m.d.sync += self.fault(
@@ -473,75 +469,67 @@ class Top(Elaboratable):
                             m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
                             m.next = "faulted"
 
-            with m.State("lw.init1"):
-                m.d.sync += self.sysmem_rd.addr.eq(self.sysmem_rd.addr + 1)
-                m.next = "lw.read0"
-
-            with m.State("lw.read0"):
-                m.d.sync += self.partial_read.eq(self.sysmem_rd.data)
-                m.next = "lw.resolve"
-
-            with m.State("lw.resolve"):
-                data = Cat(self.partial_read[:16], self.sysmem_rd.data)
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    self.write_xreg(self.ls_reg, data),
-                ]
-                m.next = "fetch.init0"
+            with m.State("lw.delay"):
+                with m.If(mmu.read.valid):
+                    m.d.sync += [
+                        self.pc.eq(self.pc + 4),
+                        self.write_xreg(self.ls_reg, mmu.read.value),
+                    ]
+                    m.next = "fetch.init"
 
             with m.State("lh.delay"):
-                m.next = "lh.resolve"
-
-            with m.State("lh.resolve"):
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    self.write_xreg(self.ls_reg, self.sysmem_rd.data.as_signed()),
-                ]
-                m.next = "fetch.init0"
+                with m.If(mmu.read.valid):
+                    m.d.sync += [
+                        self.pc.eq(self.pc + 4),
+                        self.write_xreg(self.ls_reg, mmu.read.value[:16].as_signed()),
+                    ]
+                    m.next = "fetch.init"
 
             with m.State("lhu.delay"):
-                m.next = "lhu.resolve"
-
-            with m.State("lhu.resolve"):
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    self.write_xreg(self.ls_reg, self.sysmem_rd.data),
-                ]
-                m.next = "fetch.init0"
+                with m.If(mmu.read.valid):
+                    m.d.sync += [
+                        self.pc.eq(self.pc + 4),
+                        self.write_xreg(self.ls_reg, mmu.read.value),
+                    ]
+                    m.next = "fetch.init"
 
             with m.State("lb.delay"):
-                m.next = "lb.resolve"
-
-            with m.State("lb.resolve"):
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    self.write_xreg(
-                        self.ls_reg,
-                        self.sysmem_rd.data.word_select(self.ls_off, 8).as_signed(),
-                    ),
-                ]
-                m.next = "fetch.init0"
+                with m.If(mmu.read.valid):
+                    m.d.sync += [
+                        self.pc.eq(self.pc + 4),
+                        self.write_xreg(
+                            self.ls_reg,
+                            mmu.read.value[:8].as_signed()
+                            # sysmem_rd.data.word_select(self.ls_off, 8).as_signed(),
+                        ),
+                    ]
+                    m.next = "fetch.init"
 
             with m.State("lbu.delay"):
-                m.next = "lbu.resolve"
+                with m.If(mmu.read.valid):
+                    m.d.sync += [
+                        self.pc.eq(self.pc + 4),
+                        self.write_xreg(
+                            self.ls_reg,
+                            mmu.read.value[:8]
+                            # self.ls_reg, sysmem_rd.data.word_select(self.ls_off, 8)
+                        ),
+                    ]
+                    m.next = "fetch.init"
 
-            with m.State("lbu.resolve"):
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    self.write_xreg(
-                        self.ls_reg, self.sysmem_rd.data.word_select(self.ls_off, 8)
-                    ),
-                ]
-                m.next = "fetch.init0"
+            # with m.State("s.delay"):
+            #     with m.If(mmu.read.rdy):
+            #         m.d.sync += self.pc.eq(self.pc + 4)
+            #         m.next = "fetch.init"
 
             with m.State("sw.write1"):
                 m.d.sync += [
                     self.pc.eq(self.pc + 4),
-                    self.sysmem_wr.addr.eq(self.sysmem_wr.addr + 1),
-                    self.sysmem_wr.data.eq(self.xreg[self.ls_reg][16:]),
-                    self.sysmem_wr.en.eq(0b11),
+                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.data.eq(self.xreg[self.ls_reg][16:]),
+                    sysmem_wr.en.eq(0b11),
                 ]
-                m.next = "fetch.init0"
+                m.next = "fetch.init"
 
             with m.State("faulted"):
                 m.d.comb += self.state.eq(State.FAULTED)

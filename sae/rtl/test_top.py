@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from amaranth import Memory
+from amaranth.lib.memory import Memory
 
 from . import FaultCode, State, Top
 from .rv32 import Reg
@@ -17,5 +17,5 @@ class TestTop(unittest.TestCase):
             Path(__file__).parent / "test_shrimple.bin",
             reg_inits={"x1": 0xFFFF_FFFF},
         )
-        self.assertEqual(FaultCode.PC_MISALIGNED, results["faultcode"])
+        self.assertEqual(FaultCode.PC_MISALIGNED, FaultCode(results["faultcode"]))
         self.assertEqual(123, results[Reg("A0")])

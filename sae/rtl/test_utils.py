@@ -1,7 +1,7 @@
 from functools import singledispatch
 from pathlib import Path
 
-from amaranth import Memory
+from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
 
 from . import State, Top
@@ -63,7 +63,7 @@ def run_until_fault_bin(path, *, memory=8192, **kwargs):
 @run_until_fault.register(list)
 def run_until_fault_por(mem, **kwargs):
     return run_until_fault(
-        Top(sysmem=Memory(width=16, depth=len(mem), init=mem), **kwargs)
+        Top(sysmem=Memory(depth=len(mem), shape=16, init=mem), **kwargs)
     )
 
 
