@@ -5,17 +5,17 @@ from amaranth import Elaboratable, Module
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
 
-from .mmu import AccessWidth, MMURead
+from .mmu import AccessWidth, MMURead, MMUWrite
 
 
-def pms(mr):
+def pmrs(mr):
     print(
         f"MMUR: [{(yield mr.state):0>1x}] addr={(yield mr.addr):0>8x}  width={AccessWidth((yield mr.width))}  "
         f"value={(yield mr.value):0>8x}  valid={(yield mr.valid):b}"
     )
 
 
-class TestMMURead(unittest.TestCase):
+class TestBase:
     def waitFor(self, s, *, change_to, ticks):
         for i in range(ticks):
             self.assertNotEqual(
@@ -28,6 +28,8 @@ class TestMMURead(unittest.TestCase):
             f"{s} didn't change to {change_to} after {ticks} tick(s)",
         )
 
+
+class TestMMURead(unittest.TestCase, TestBase):
     def simTestbench(self, bench, init):
         mr = MMURead(Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(mr)
@@ -53,3 +55,27 @@ class TestMMURead(unittest.TestCase):
             self.assertEqual(0xABCD1234, (yield mr.value))
 
         self.simTestbench(bench, [0x1234, 0xABCD, 0x5678, 0xEF01])
+
+
+class TestMMUWrite(unittest.TestCase, TestBase):
+    def simTestbench(self, bench, init):
+        mw = MMUWrite(Memory(depth=len(init), shape=16, init=init))
+        sim = Simulator(mw)
+        sim.add_clock(1e-6)
+        sim.add_testbench(partial(bench, mw))
+        sim.run()
+
+    def test_simple(self):
+        def bench(mw):
+            yield mw.width.eq(AccessWidth.BYTE)
+            yield mw.addr.eq(0)
+            yield mw.data.eq(0xAAAAAAAA)
+            self.assertTrue((yield mw.rdy))
+            yield mw.ack.eq(1)
+            yield Tick()
+            self.assertFalse((yield mw.rdy))
+            yield mw.ack.eq(0)
+            yield from self.waitFor(mw.rdy, change_to=1, ticks=1)
+            self.assertEqual(0xAA, (yield mw.sysmem[0]))
+
+        self.simTestbench(bench, [0x0000, 0x0000])

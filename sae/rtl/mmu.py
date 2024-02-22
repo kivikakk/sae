@@ -12,23 +12,34 @@ class AccessWidth(IntEnum, shape=2):  # type: ignore
     WORD = 2
 
 
-class MMUReaderSignature(Signature):
-    def __init__(self, width):
+class MMUReadSignature(Signature):
+    def __init__(self, addr_width, data_width):
         super().__init__(
             {
-                "addr": Out(width),
+                "addr": Out(addr_width),
                 "width": Out(AccessWidth),
-                "value": In(width),
+                "value": In(data_width),
                 "valid": In(1),
             }
         )
 
 
+class MMUWriteSignature(Signature):
+    def __init__(self, addr_width, data_width):
+        super().__init__(
+            {
+                "addr": Out(addr_width),
+                "width": Out(AccessWidth),
+                "data": Out(data_width),
+                "rdy": In(1),
+                "ack": Out(1),
+            }
+        )
+
+
 class MMU(Component):
-    read: In(MMUReaderSignature(32))
-    data: In(32)
-    rdy: Out(1)  # write rdy
-    ack: In(1)  # write strobe
+    read: In(MMUReadSignature(32, 32))
+    write: In(MMUWriteSignature(32, 32))
 
     sysmem: Memory
 
@@ -40,15 +51,18 @@ class MMU(Component):
     def elaborate(self, platform):
         m = Module()
 
-        mmuread = m.submodules.mmuread = MMURead(self.sysmem)
-        connect(m, flipped(self.read), mmuread)
+        read = m.submodules.read = MMURead(self.sysmem)
+        connect(m, flipped(self.read), read)
+
+        write = m.submodules.write = MMUWrite(self.sysmem)
+        connect(m, flipped(self.write), write)
 
         return m
 
 
 class MMURead(Component):
     def __init__(self, sysmem):
-        super().__init__(MMUReaderSignature(32).flip())
+        super().__init__(MMUReadSignature(32, 32).flip())
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
 
@@ -151,6 +165,39 @@ class MMURead(Component):
                     self.value.eq(self.value | (sysmem_rd.data[:8] << 24)),
                     underlying_valid.eq(1),
                 ]
+                m.next = "init"
+
+        return m
+
+
+class MMUWrite(Component):
+    def __init__(self, sysmem):
+        super().__init__(MMUWriteSignature(32, 32).flip())
+        assert Shape.cast(sysmem.shape).width == 16
+        self.sysmem = sysmem
+
+    def elaborate(self, platform):
+        m = Module()
+
+        m.submodules.sysmem = self.sysmem
+        sysmem_wr = self.sysmem.write_port(granularity=8)
+
+        m.d.comb += self.rdy.eq(0)
+
+        with m.FSM():
+            with m.State("init"):
+                m.d.comb += self.rdy.eq(1)
+
+                with m.If(self.ack):
+                    m.d.sync += [
+                        sysmem_wr.addr.eq(self.addr >> 1),
+                        sysmem_wr.data.eq(self.data),
+                        sysmem_wr.en.eq(0b01),
+                    ]
+                    m.next = "unstb"
+
+            with m.State("unstb"):
+                m.d.sync += sysmem_wr.en.eq(0)
                 m.next = "init"
 
         return m
