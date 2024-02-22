@@ -182,13 +182,11 @@ class MMUWrite(Component):
         m.submodules.sysmem = self.sysmem
         sysmem_wr = self.sysmem.write_port(granularity=8)
 
-        m.d.comb += self.rdy.eq(0)
+        m.d.sync += self.rdy.eq(1)
 
         with m.FSM():
             with m.State("init"):
                 m.d.sync += sysmem_wr.en.eq(0)
-
-                m.d.comb += self.rdy.eq(1)
 
                 with m.If(self.ack):
                     with m.Switch(self.width):
@@ -209,6 +207,7 @@ class MMUWrite(Component):
                             with m.Else():
                                 # unaligned
                                 m.d.sync += [
+                                    self.rdy.eq(0),
                                     sysmem_wr.data.eq(
                                         Cat(self.data[8:16], self.data[:8])
                                     ),
