@@ -128,9 +128,8 @@ class Top(Elaboratable):
             case _:
                 uart = None
 
-        sysmem = m.submodules.sysmem = self.sysmem
-        mmu = m.submodules.mmu = MMU(sysmem)
-        sysmem_wr = sysmem.write_port(granularity=8)
+        mmu = m.submodules.mmu = MMU(self.sysmem)
+        sysmem_wr = self.sysmem.write_port(granularity=8)
 
         m.d.comb += self.state.eq(State.RUNNING)
 

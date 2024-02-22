@@ -1,4 +1,4 @@
-from amaranth import Module, Shape, Signal
+from amaranth import Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 from amaranth.lib.wiring import Component, In, Out, Signature, connect, flipped
@@ -51,17 +51,28 @@ class MMURead(Component):
         super().__init__(MMUReaderSignature(32).flip())
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
+        self.state = Signal(range(6))
 
     def elaborate(self, platform):
         m = Module()
 
+        m.submodules.sysmem = self.sysmem
         sysmem_rd = self.sysmem.read_port()
 
         r_addr = Signal(32, init=-1)
         r_width = Signal(AccessWidth)
 
+        state = self.state
+
+        underlying_valid = Signal()
+        m.d.comb += self.valid.eq(
+            (r_addr == self.addr) & (r_width == self.width) & underlying_valid
+        )
+
         with m.FSM():
             with m.State("init"):
+                m.d.comb += state.eq(1)
+
                 # XXX: for now we ignore un-32-bit-aligned requests entirely lol
                 with m.If(
                     ((self.addr != r_addr) | (self.width != r_width))
@@ -70,28 +81,47 @@ class MMURead(Component):
                     m.d.sync += [
                         r_addr.eq(self.addr),
                         r_width.eq(self.width),
-                        self.valid.eq(0),
+                        underlying_valid.eq(0),
                         sysmem_rd.addr.eq(self.addr >> 1),
                     ]
                     m.next = "pipe0"
 
             with m.State("pipe0"):
+                m.d.comb += state.eq(2)
+
                 with m.If(r_width == AccessWidth.WORD):
                     m.d.sync += sysmem_rd.addr.eq(sysmem_rd.addr + 1)
-                m.next = "coll0"
+                    m.next = "coll0"
+                with m.Else():
+                    m.next = "coll"
+
+            with m.State("coll"):
+                m.d.comb += state.eq(3)
+
+                m.d.sync += [
+                    self.value.eq(
+                        Mux(
+                            r_width == AccessWidth.HALF,
+                            sysmem_rd.data,
+                            sysmem_rd.data[:8],
+                        )
+                    ),
+                    underlying_valid.eq(1),
+                ]
+                m.next = "init"
 
             with m.State("coll0"):
+                m.d.comb += state.eq(4)
+
                 m.d.sync += self.value.eq(sysmem_rd.data)
-                with m.If(r_width != AccessWidth.WORD):
-                    m.d.sync += self.valid.eq(1)
-                    m.next = "init"
-                with m.Else():
-                    m.next = "coll1"
+                m.next = "coll1"
 
             with m.State("coll1"):
+                m.d.comb += state.eq(5)
+
                 m.d.sync += [
                     self.value.eq(self.value | (sysmem_rd.data << 16)),
-                    self.valid.eq(1),
+                    underlying_valid.eq(1),
                 ]
                 m.next = "init"
 

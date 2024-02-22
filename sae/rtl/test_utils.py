@@ -17,7 +17,7 @@ def run_until_fault(top):
     def bench():
         nonlocal results
         first = True
-        pc = None
+        partial_read = None
         written = set()
         print()
         while State.RUNNING == (yield top.state):
@@ -25,9 +25,9 @@ def run_until_fault(top):
                 first = False
             else:
                 yield Tick()
-            last_pc, pc = pc, (yield top.pc)
-            if pc != last_pc:
-                print(f"pc={pc:08x}   mem=", end="")
+            last_partial_read, partial_read = partial_read, (yield top.partial_read)
+            if partial_read != last_partial_read:
+                print(f"pc={(yield top.pc):08x} [{partial_read:0>8x}]  mem=", end="")
                 for i in range(min(top.sysmem.depth, 5)):
                     v = yield top.sysmem[i]
                     print(f"{v:0>4x} ", end="")
@@ -84,7 +84,7 @@ class InsnTestHelpers:
     def run_body(self, regs):
         top = Top(
             sysmem=Memory(
-                width=16, depth=len(self.body) + 2, init=self.body + [0xFFFF, 0xFFFF]
+                depth=len(self.body) + 2, shape=16, init=self.body + [0xFFFF, 0xFFFF]
             ),
             reg_inits=regs,
             track_reg_written=True,
