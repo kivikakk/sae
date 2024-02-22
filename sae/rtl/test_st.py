@@ -50,7 +50,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
     @classmethod
     def translate_arg(cls, arg, name):
         if isinstance(arg, st.Register):
-            return Reg[f"X{arg.register[1:]}"]
+            return Reg(arg.register.upper())
         elif isinstance(arg, (int, st.Offset)):
             return arg
         elif name in ("pred", "succ"):
@@ -101,8 +101,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                                 int(asserts.pop("faultinsn", "0xFFFFFFFF"), 0),
                             )
                         for reg, assign in asserts.items():
-                            assert reg[0] == "x"
-                            self.assertReg(Reg[reg.upper()], assign)
+                            self.assertReg(Reg(reg.upper()), assign)
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)

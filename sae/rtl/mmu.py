@@ -51,7 +51,7 @@ class MMURead(Component):
         super().__init__(MMUReaderSignature(32).flip())
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
-        self.state = Signal(range(6))
+        self.state = Signal(range(7))
 
     def elaborate(self, platform):
         m = Module()
@@ -69,33 +69,49 @@ class MMURead(Component):
             (r_addr == self.addr) & (r_width == self.width) & underlying_valid
         )
 
+        #  0 . 1 | 2 . 3 | 4 . 5 | 6    acc#
+        # ^^^^^^^|^^^^^^^|^^^^^^^|^^^^^^^^^^
+        #  [-----|-----] |       |       2
+        #      [-|-------|-]     |       3
+        #        | [-----|-----] |       2
+        #        |     [-|-------|-]     3
+        #  [---] |       |       |       1
+        #      [-|-]     |       |       2
+        #  []    |       |       |       1
+        #     [] |       |       |       1
+        #
+        # Note that:
+        #   * word accesses take 2+a[0] reads,
+        #   * half accesses take 1+a[0] reads, and
+        #   * byte accesses take 1 read.
+
         with m.FSM():
             with m.State("init"):
                 m.d.comb += state.eq(1)
 
-                # XXX: for now we ignore un-32-bit-aligned requests entirely lol
-                with m.If(
-                    ((self.addr != r_addr) | (self.width != r_width))
-                    & ~self.addr[:2].any()
-                ):
+                with m.If((self.addr != r_addr) | (self.width != r_width)):
                     m.d.sync += [
                         r_addr.eq(self.addr),
                         r_width.eq(self.width),
                         underlying_valid.eq(0),
                         sysmem_rd.addr.eq(self.addr >> 1),
                     ]
-                    m.next = "pipe0"
+                    m.next = "pipe"
 
-            with m.State("pipe0"):
+            with m.State("pipe"):
                 m.d.comb += state.eq(2)
+                m.d.sync += sysmem_rd.addr.eq(sysmem_rd.addr + 1)
 
-                with m.If(r_width == AccessWidth.WORD):
-                    m.d.sync += sysmem_rd.addr.eq(sysmem_rd.addr + 1)
+                with m.If(
+                    (r_width == AccessWidth.WORD)
+                    | ((r_width == AccessWidth.HALF) & r_addr[0])
+                ):
                     m.next = "coll0"
                 with m.Else():
                     m.next = "coll"
 
             with m.State("coll"):
+                # aligned half, or byte
                 m.d.comb += state.eq(3)
 
                 m.d.sync += [
@@ -103,7 +119,7 @@ class MMURead(Component):
                         Mux(
                             r_width == AccessWidth.HALF,
                             sysmem_rd.data,
-                            sysmem_rd.data[:8],
+                            sysmem_rd.data.word_select(r_addr[0], 8),
                         )
                     ),
                     underlying_valid.eq(1),
@@ -111,16 +127,42 @@ class MMURead(Component):
                 m.next = "init"
 
             with m.State("coll0"):
+                # word, or unaligned half
                 m.d.comb += state.eq(4)
 
-                m.d.sync += self.value.eq(sysmem_rd.data)
+                m.d.sync += [
+                    sysmem_rd.addr.eq(sysmem_rd.addr + 1),
+                    self.value.eq(sysmem_rd.data),
+                ]
                 m.next = "coll1"
 
             with m.State("coll1"):
                 m.d.comb += state.eq(5)
 
+                with m.If(r_width == AccessWidth.HALF):
+                    # unaligned half
+                    m.d.sync += [
+                        self.value.eq(self.value[8:] | (sysmem_rd.data[:8] << 8)),
+                        underlying_valid.eq(1),
+                    ]
+                    m.next = "init"
+                with m.Elif(~r_addr[0]):
+                    # aligned word
+                    m.d.sync += [
+                        self.value.eq(self.value | (sysmem_rd.data << 16)),
+                        underlying_valid.eq(1),
+                    ]
+                    m.next = "init"
+                with m.Else():
+                    # unaligned word
+                    m.d.sync += self.value.eq(self.value[:8] | (sysmem_rd.data << 8))
+                    m.next = "coll2"
+
+            with m.State("coll2"):
+                m.d.comb += state.eq(6)
+
                 m.d.sync += [
-                    self.value.eq(self.value | (sysmem_rd.data << 16)),
+                    self.value.eq(self.value | (sysmem_rd.data[:8] << 24)),
                     underlying_valid.eq(1),
                 ]
                 m.next = "init"

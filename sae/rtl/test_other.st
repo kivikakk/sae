@@ -139,13 +139,15 @@ test_load_store:
 
 test_load_store_h:
     .init
-    li x1, 0x1234FEDC
+    li a0, 0x1234FEDC
     sw x0, 0(x0)                ; &0x00: 00 00  00 00
-    sh x1, 0(x0)                ; &0x00: DC FE  00 00
-    lw x2, 0(x0)
-    lh x3, 0(x0)
-    lhu x4, 0(x0)
-    .assert x1=0x1234FEDC, x2=0x0000FEDC, x3=0xFFFFFEDC, x4=0x0000FEDC
+    sh a0, 0(x0)                ; &0x00: DC FE  00 00
+    lw a1, 0(x0)
+    lh a2, 0(x0)
+    lhu a3, 0(x0)
+    lh a4, 1(x0)
+    lhu a5, 1(x0)
+    .assert a0=0x1234FEDC, a1=0x0000FEDC, a2=0xFFFFFEDC, a3=0x0000FEDC, a4=0x000000FE, a5=0x000000FE
 
 test_load_store_b:
     .init

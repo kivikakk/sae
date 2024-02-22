@@ -107,7 +107,7 @@ class InsnTestHelpers:
 
     def assertRegValue(self, expected, actual, *, rn=None):
         if rn is not None:
-            rn = f"{rn}="
+            rn = f"{rn!r}="
         if expected is Unwritten or actual is Unwritten:
             self.assertIs(
                 expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"

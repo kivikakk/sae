@@ -15,7 +15,7 @@ tokenize = make_tokenizer(
         TokenSpec("label", r"\w+:"),
         TokenSpec("pragma", r"\.\w+"),
         TokenSpec("offset", r"\d+\((x[0-9]|x[12][0-9]|x3[01])\)"),
-        TokenSpec("register", "pc|x[0-9]|x[12][0-9]|x3[01]"),
+        TokenSpec("register", "pc|x[0-9]|x[12][0-9]|x3[01]|a[0-7]"),
         TokenSpec("word", r"[a-zA-Z][a-zA-Z0-9_.]*"),
         TokenSpec("number", r"(-\s*)?(0[xX][0-9a-fA-F_]+|0[bB][01_]+|[0-9_]+)"),
         TokenSpec("comma", r","),

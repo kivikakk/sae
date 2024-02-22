@@ -98,7 +98,7 @@ class Reg(IntEnum, shape=5):
         try:
             ix = REG_MAPPINGS.index(value.lower())
         except ValueError:
-            return None
+            return cls[value]
         else:
             return cls[f"X{ix}"]
 
