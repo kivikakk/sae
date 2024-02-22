@@ -1,4 +1,4 @@
-from amaranth import Cat, Module, Mux, Shape, Signal
+from amaranth import C, Cat, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 from amaranth.lib.wiring import Component, In, Out, Signature, connect, flipped
@@ -213,11 +213,54 @@ class MMUWrite(Component):
                                     ),
                                     sysmem_wr.en.eq(0b10),
                                 ]
-                                m.next = "unaligned"
+                                m.next = "half.unaligned"
 
-            with m.State("unaligned"):
+                        with m.Case(AccessWidth.WORD):
+                            m.d.sync += [
+                                self.rdy.eq(0),
+                                sysmem_wr.addr.eq(self.addr >> 1),
+                            ]
+                            with m.If(~self.addr[0]):
+                                m.d.sync += [
+                                    sysmem_wr.data.eq(self.data[:16]),
+                                    sysmem_wr.en.eq(0b11),
+                                ]
+                                m.next = "word"
+                            with m.Else():
+                                m.d.sync += [
+                                    sysmem_wr.data.eq(Cat(C(0, 8), self.data[:8])),
+                                    sysmem_wr.en.eq(0b10),
+                                ]
+                                m.next = "word.unaligned"
+
+            with m.State("half.unaligned"):
                 m.d.sync += [
                     sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.en.eq(0b01),
+                ]
+                m.next = "init"
+
+            with m.State("word"):
+                m.d.sync += [
+                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.data.eq(self.data[16:]),
+                    sysmem_wr.en.eq(0b11),
+                ]
+                m.next = "init"
+
+            with m.State("word.unaligned"):
+                m.d.sync += [
+                    self.rdy.eq(0),
+                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.data.eq(self.data[8:24]),
+                    sysmem_wr.en.eq(0b11),
+                ]
+                m.next = "word.unaligned.fish"
+
+            with m.State("word.unaligned.fish"):
+                m.d.sync += [
+                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
+                    sysmem_wr.data.eq(self.data[24:]),
                     sysmem_wr.en.eq(0b01),
                 ]
                 m.next = "init"

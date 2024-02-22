@@ -1,7 +1,6 @@
 import unittest
 from functools import partial
 
-from amaranth import Elaboratable, Module
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
 
@@ -19,7 +18,9 @@ class TestBase:
     def waitFor(self, s, *, change_to, ticks):
         for i in range(ticks):
             self.assertNotEqual(
-                change_to, (yield s), f"{s} changed to {change_to} after {i} tick(s)"
+                change_to,
+                (yield s),
+                f"{s} changed to {change_to} after {i} tick(s) (out of {ticks})",
             )
             yield Tick()
         self.assertEqual(
@@ -94,6 +95,8 @@ class TestMMUWrite(unittest.TestCase, TestBase):
         ticks = 0
         if addr & 1 and width != AccessWidth.BYTE:
             ticks += 1
+        if width == AccessWidth.WORD:
+            ticks += 1
 
         def bench(mw):
             yield mw.width.eq(width)
@@ -116,7 +119,15 @@ class TestMMUWrite(unittest.TestCase, TestBase):
 
     def test_simple(self):
         mem = [0xABCD, 0xEFFE]
+        self.assertWrite(mem, 0, AccessWidth.BYTE, 0x12345678, [0xAB78, 0xEFFE])
+        self.assertWrite(mem, 1, AccessWidth.BYTE, 0x12345678, [0x78CD, 0xEFFE])
         self.assertWrite(mem, 2, AccessWidth.BYTE, 0x12345678, [0xABCD, 0xEF78])
         self.assertWrite(mem, 3, AccessWidth.BYTE, 0x12345678, [0xABCD, 0x78FE])
+        self.assertWrite(mem, 0, AccessWidth.HALF, 0x12345678, [0x5678, 0xEFFE])
+        self.assertWrite(mem, 1, AccessWidth.HALF, 0x12345678, [0x78CD, 0xEF56])
         self.assertWrite(mem, 2, AccessWidth.HALF, 0x12345678, [0xABCD, 0x5678])
         self.assertWrite(mem, 3, AccessWidth.HALF, 0x12345678, [0xAB56, 0x78FE])
+        self.assertWrite(mem, 0, AccessWidth.WORD, 0x12345678, [0x5678, 0x1234])
+        self.assertWrite(mem, 1, AccessWidth.WORD, 0x12345678, [0x7812, 0x3456])
+        self.assertWrite(mem, 2, AccessWidth.WORD, 0x12345678, [0x1234, 0x5678])
+        self.assertWrite(mem, 3, AccessWidth.WORD, 0x12345678, [0x3456, 0x7812])
