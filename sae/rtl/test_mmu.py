@@ -90,67 +90,35 @@ class TestMMUWrite(unittest.TestCase, TestBase):
         sim.add_testbench(partial(bench, mw))
         sim.run()
 
+    def assertWrite(self, imem, addr, width, value, omem):
+        ticks = 0
+        if addr & 1 and width != AccessWidth.BYTE:
+            ticks += 1
+
+        def bench(mw):
+            yield mw.width.eq(width)
+            yield mw.addr.eq(addr)
+            yield mw.data.eq(value)
+            yield from self.waitFor(mw.rdy, change_to=1, ticks=1)
+            yield mw.ack.eq(1)
+            yield Tick()
+            yield mw.ack.eq(0)
+            yield from self.waitFor(mw.rdy, change_to=1, ticks=ticks)
+            yield Tick()
+            for i, (ex, s) in enumerate(zip(omem, mw.sysmem)):
+                self.assertEqual(
+                    ex,
+                    (yield s),
+                    f"failed at index {i}: omem {ex:0>4x} != sysmem {(yield s):0>4x}",
+                )
+
+        self.simTestbench(bench, imem)
+
     def test_simple(self):
-        def bench(mw):
-            yield mw.width.eq(AccessWidth.BYTE)
-            yield mw.addr.eq(0)
-            yield mw.data.eq(0xAAAAAAAA)
-            self.waitFor(mw.rdy, change_to=1, ticks=1)
-            yield mw.ack.eq(1)
-            yield Tick()
-            self.assertTrue((yield mw.rdy))
-            yield mw.ack.eq(0)
-            yield Tick()
-            self.assertEqual(0xAA, (yield mw.sysmem[0]))
+        mem = [0, 0]
+        self.assertWrite(mem, 2, AccessWidth.BYTE, 0xAAAAAAAA, [0x0000, 0x00AA])
+        self.assertWrite(mem, 3, AccessWidth.BYTE, 0xAAAAAAAA, [0x0000, 0xAA00])
 
-        self.simTestbench(bench, [0x0000, 0x0000])
-
-    def test_simple_off(self):
-        def bench(mw):
-            yield mw.width.eq(AccessWidth.BYTE)
-            yield mw.addr.eq(1)
-            yield mw.data.eq(0xAAAAAAAA)
-            self.waitFor(mw.rdy, change_to=1, ticks=1)
-            yield mw.ack.eq(1)
-            yield Tick()
-            self.assertTrue((yield mw.rdy))
-            yield mw.ack.eq(0)
-            yield Tick()
-            self.assertEqual(0xAA00, (yield mw.sysmem[0]))
-
-        self.simTestbench(bench, [0x0000, 0x0000])
-
-    def test_16(self):
-        def bench(mw):
-            yield mw.width.eq(AccessWidth.HALF)
-            yield mw.addr.eq(0)
-            yield mw.data.eq(0xAAAAAAAA)
-            self.waitFor(mw.rdy, change_to=1, ticks=1)
-            yield mw.ack.eq(1)
-            yield Tick()
-            self.assertTrue((yield mw.rdy))
-            yield mw.ack.eq(0)
-            yield Tick()
-            self.assertEqual(0xAAAA, (yield mw.sysmem[0]))
-            self.assertEqual(0x0000, (yield mw.sysmem[1]))
-
-        self.simTestbench(bench, [0x0000, 0x0000])
-
-    def test_16_off(self):
-        def bench(mw):
-            yield mw.width.eq(AccessWidth.HALF)
-            yield mw.addr.eq(3)
-            yield mw.data.eq(0xAAAAAAAA)
-            self.waitFor(mw.rdy, change_to=1, ticks=1)
-            yield mw.ack.eq(1)
-            yield Tick()
-            self.assertFalse((yield mw.rdy))
-            yield mw.ack.eq(0)
-            yield Tick()
-            self.assertTrue((yield mw.rdy))
-            yield Tick()
-            self.assertEqual(0x0000, (yield mw.sysmem[0]))
-            self.assertEqual(0xAA00, (yield mw.sysmem[1]))
-            self.assertEqual(0x00AA, (yield mw.sysmem[2]))
-
-        self.simTestbench(bench, [0x0000, 0x0000, 0x0000])
+        mem = [0, 0, 0]
+        self.assertWrite(mem, 2, AccessWidth.HALF, 0xAAAAAAAA, [0x0000, 0xAAAA, 0x0000])
+        self.assertWrite(mem, 3, AccessWidth.HALF, 0xAAAAAAAA, [0x0000, 0xAA00, 0x00AA])
