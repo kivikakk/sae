@@ -79,3 +79,18 @@ class TestMMUWrite(unittest.TestCase, TestBase):
             self.assertEqual(0xAA, (yield mw.sysmem[0]))
 
         self.simTestbench(bench, [0x0000, 0x0000])
+
+    def test_simple_off(self):
+        def bench(mw):
+            yield mw.width.eq(AccessWidth.BYTE)
+            yield mw.addr.eq(1)
+            yield mw.data.eq(0xAAAAAAAA)
+            self.assertTrue((yield mw.rdy))
+            yield mw.ack.eq(1)
+            yield Tick()
+            self.assertFalse((yield mw.rdy))
+            yield mw.ack.eq(0)
+            yield from self.waitFor(mw.rdy, change_to=1, ticks=1)
+            self.assertEqual(0xAA00, (yield mw.sysmem[0]))
+
+        self.simTestbench(bench, [0x0000, 0x0000])

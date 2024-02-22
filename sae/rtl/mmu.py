@@ -189,10 +189,11 @@ class MMUWrite(Component):
                 m.d.comb += self.rdy.eq(1)
 
                 with m.If(self.ack):
+                    # byte
                     m.d.sync += [
                         sysmem_wr.addr.eq(self.addr >> 1),
-                        sysmem_wr.data.eq(self.data),
-                        sysmem_wr.en.eq(0b01),
+                        sysmem_wr.data.eq(self.data[:8].replicate(2)),
+                        sysmem_wr.en.eq(Mux(self.addr[0], 0b10, 0b01)),
                     ]
                     m.next = "unstb"
 
