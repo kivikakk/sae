@@ -1,7 +1,8 @@
 from amaranth import C, Cat, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
-from amaranth.lib.memory import Memory
+from amaranth.lib.memory import Memory, ReadPort, WritePort
 from amaranth.lib.wiring import Component, In, Out, Signature, connect, flipped
+from amaranth.utils import ceil_log2
 
 __all__ = ["MMU", "AccessWidth"]
 
@@ -12,38 +13,39 @@ class AccessWidth(IntEnum, shape=2):  # type: ignore
     WORD = 2
 
 
-class MMUReadSignature(Signature):
+class MMUReadBusSignature(Signature):
     def __init__(self, addr_width, data_width):
         super().__init__(
             {
-                "addr": Out(addr_width),
-                "width": Out(AccessWidth),
-                "value": In(data_width),
-                "valid": In(1),
+                "addr": In(addr_width),
+                "width": In(AccessWidth),
+                "value": Out(data_width),
+                "valid": Out(1),
             }
         )
 
 
-class MMUWriteSignature(Signature):
+class MMUWriteBusSignature(Signature):
     def __init__(self, addr_width, data_width):
         super().__init__(
             {
-                "addr": Out(addr_width),
-                "width": Out(AccessWidth),
-                "data": Out(data_width),
-                "rdy": In(1),
-                "ack": Out(1),
+                "addr": In(addr_width),
+                "width": In(AccessWidth),
+                "data": In(data_width),
+                "ack": In(1),
+                "rdy": Out(1),
             }
         )
 
 
 class MMU(Component):
-    read: In(MMUReadSignature(32, 32))
-    write: In(MMUWriteSignature(32, 32))
-
+    read: Out(MMUReadBusSignature(32, 32))
+    write: Out(MMUWriteBusSignature(32, 32))
+    mmu_read: "MMURead"
+    mmu_write: "MMUWrite"
     sysmem: Memory
 
-    def __init__(self, sysmem):
+    def __init__(self, *, sysmem):
         super().__init__()
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
@@ -51,33 +53,40 @@ class MMU(Component):
     def elaborate(self, platform):
         m = Module()
 
-        read = m.submodules.read = MMURead(self.sysmem)
-        connect(m, flipped(self.read), read)
+        m.submodules.sysmem = sysmem = self.sysmem
+        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem)
+        connect(m, flipped(self.read), mmu_read.read)
+        connect(m, sysmem.read_port(), mmu_read.port)
 
-        write = m.submodules.write = MMUWrite(self.sysmem)
-        connect(m, flipped(self.write), write)
+        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem)
+        connect(m, flipped(self.write), mmu_write.write)
+        connect(m, sysmem.write_port(granularity=8), mmu_write.port)
 
         return m
 
 
 class MMURead(Component):
-    def __init__(self, sysmem):
-        super().__init__(MMUReadSignature(32, 32).flip())
-        assert Shape.cast(sysmem.shape).width == 16
-        self.sysmem = sysmem
+    def __init__(self, *, sysmem):
+        super().__init__(
+            {
+                "read": Out(MMUReadBusSignature(32, 32)),
+                "port": In(
+                    ReadPort.Signature(
+                        addr_width=ceil_log2(sysmem.depth), shape=sysmem.shape
+                    )
+                ),
+            }
+        )
 
     def elaborate(self, platform):
         m = Module()
-
-        m.submodules.sysmem = self.sysmem
-        sysmem_rd = self.sysmem.read_port()
 
         r_addr = Signal(32, init=-1)
         r_width = Signal(AccessWidth)
 
         underlying_valid = Signal()
-        m.d.comb += self.valid.eq(
-            (r_addr == self.addr) & (r_width == self.width) & underlying_valid
+        m.d.comb += self.read.valid.eq(
+            (r_addr == self.read.addr) & (r_width == self.read.width) & underlying_valid
         )
 
         #  0 . 1 | 2 . 3 | 4 . 5 | 6    acc#
@@ -98,17 +107,17 @@ class MMURead(Component):
 
         with m.FSM():
             with m.State("init"):
-                with m.If((self.addr != r_addr) | (self.width != r_width)):
+                with m.If((self.read.addr != r_addr) | (self.read.width != r_width)):
                     m.d.sync += [
-                        r_addr.eq(self.addr),
-                        r_width.eq(self.width),
+                        r_addr.eq(self.read.addr),
+                        r_width.eq(self.read.width),
                         underlying_valid.eq(0),
-                        sysmem_rd.addr.eq(self.addr >> 1),
+                        self.port.addr.eq(self.read.addr >> 1),
                     ]
                     m.next = "pipe"
 
             with m.State("pipe"):
-                m.d.sync += sysmem_rd.addr.eq(sysmem_rd.addr + 1)
+                m.d.sync += self.port.addr.eq(self.port.addr + 1)
 
                 with m.If(
                     (r_width == AccessWidth.WORD)
@@ -121,11 +130,11 @@ class MMURead(Component):
             with m.State("coll"):
                 # aligned half, or byte
                 m.d.sync += [
-                    self.value.eq(
+                    self.read.value.eq(
                         Mux(
                             r_width == AccessWidth.HALF,
-                            sysmem_rd.data,
-                            sysmem_rd.data.word_select(r_addr[0], 8),
+                            self.port.data,
+                            self.port.data.word_select(r_addr[0], 8),
                         )
                     ),
                     underlying_valid.eq(1),
@@ -135,8 +144,8 @@ class MMURead(Component):
             with m.State("coll0"):
                 # word, or unaligned half
                 m.d.sync += [
-                    sysmem_rd.addr.eq(sysmem_rd.addr + 1),
-                    self.value.eq(sysmem_rd.data),
+                    self.port.addr.eq(self.port.addr + 1),
+                    self.read.value.eq(self.port.data),
                 ]
                 m.next = "coll1"
 
@@ -144,25 +153,29 @@ class MMURead(Component):
                 with m.If(r_width == AccessWidth.HALF):
                     # unaligned half
                     m.d.sync += [
-                        self.value.eq(self.value[8:] | (sysmem_rd.data[:8] << 8)),
+                        self.read.value.eq(
+                            self.read.value[8:] | (self.port.data[:8] << 8)
+                        ),
                         underlying_valid.eq(1),
                     ]
                     m.next = "init"
                 with m.Elif(~r_addr[0]):
                     # aligned word
                     m.d.sync += [
-                        self.value.eq(self.value | (sysmem_rd.data << 16)),
+                        self.read.value.eq(self.read.value | (self.port.data << 16)),
                         underlying_valid.eq(1),
                     ]
                     m.next = "init"
                 with m.Else():
                     # unaligned word
-                    m.d.sync += self.value.eq(self.value[8:] | (sysmem_rd.data << 8))
+                    m.d.sync += self.read.value.eq(
+                        self.read.value[8:] | (self.port.data << 8)
+                    )
                     m.next = "coll2"
 
             with m.State("coll2"):
                 m.d.sync += [
-                    self.value.eq(self.value | (sysmem_rd.data[:8] << 24)),
+                    self.read.value.eq(self.read.value | (self.port.data[:8] << 24)),
                     underlying_valid.eq(1),
                 ]
                 m.next = "init"
@@ -171,97 +184,105 @@ class MMURead(Component):
 
 
 class MMUWrite(Component):
-    def __init__(self, sysmem):
-        super().__init__(MMUWriteSignature(32, 32).flip())
-        assert Shape.cast(sysmem.shape).width == 16
-        self.sysmem = sysmem
+    def __init__(self, *, sysmem):
+        super().__init__(
+            {
+                "write": Out(MMUWriteBusSignature(32, 32)),
+                "port": In(
+                    WritePort.Signature(
+                        addr_width=ceil_log2(sysmem.depth),
+                        shape=sysmem.shape,
+                        granularity=8,
+                    )
+                ),
+            }
+        )
 
     def elaborate(self, platform):
         m = Module()
 
-        m.submodules.sysmem = self.sysmem
-        sysmem_wr = self.sysmem.write_port(granularity=8)
-
-        m.d.sync += self.rdy.eq(1)
+        m.d.sync += self.write.rdy.eq(1)
 
         with m.FSM():
             with m.State("init"):
-                m.d.sync += sysmem_wr.en.eq(0)
+                m.d.sync += self.port.en.eq(0)
 
-                with m.If(self.ack):
-                    with m.Switch(self.width):
+                with m.If(self.write.ack):
+                    with m.Switch(self.write.width):
                         with m.Case(AccessWidth.BYTE):
                             m.d.sync += [
-                                sysmem_wr.addr.eq(self.addr >> 1),
-                                sysmem_wr.data.eq(self.data[:8].replicate(2)),
-                                sysmem_wr.en.eq(Mux(self.addr[0], 0b10, 0b01)),
+                                self.port.addr.eq(self.write.addr >> 1),
+                                self.port.data.eq(self.write.data[:8].replicate(2)),
+                                self.port.en.eq(Mux(self.write.addr[0], 0b10, 0b01)),
                             ]
 
                         with m.Case(AccessWidth.HALF):
-                            m.d.sync += sysmem_wr.addr.eq(self.addr >> 1)
-                            with m.If(~self.addr[0]):
+                            m.d.sync += self.port.addr.eq(self.write.addr >> 1)
+                            with m.If(~self.write.addr[0]):
                                 m.d.sync += [
-                                    sysmem_wr.data.eq(self.data[:16]),
-                                    sysmem_wr.en.eq(0b11),
+                                    self.port.data.eq(self.write.data[:16]),
+                                    self.port.en.eq(0b11),
                                 ]
                             with m.Else():
                                 # unaligned
                                 m.d.sync += [
-                                    self.rdy.eq(0),
-                                    sysmem_wr.data.eq(
-                                        Cat(self.data[8:16], self.data[:8])
+                                    self.write.rdy.eq(0),
+                                    self.port.data.eq(
+                                        Cat(self.write.data[8:16], self.write.data[:8])
                                     ),
-                                    sysmem_wr.en.eq(0b10),
+                                    self.port.en.eq(0b10),
                                 ]
                                 m.next = "half.unaligned"
 
                         with m.Case(AccessWidth.WORD):
                             m.d.sync += [
-                                self.rdy.eq(0),
-                                sysmem_wr.addr.eq(self.addr >> 1),
+                                self.write.rdy.eq(0),
+                                self.port.addr.eq(self.write.addr >> 1),
                             ]
-                            with m.If(~self.addr[0]):
+                            with m.If(~self.write.addr[0]):
                                 m.d.sync += [
-                                    sysmem_wr.data.eq(self.data[:16]),
-                                    sysmem_wr.en.eq(0b11),
+                                    self.port.data.eq(self.write.data[:16]),
+                                    self.port.en.eq(0b11),
                                 ]
                                 m.next = "word"
                             with m.Else():
                                 m.d.sync += [
-                                    sysmem_wr.data.eq(Cat(C(0, 8), self.data[:8])),
-                                    sysmem_wr.en.eq(0b10),
+                                    self.port.data.eq(
+                                        Cat(C(0, 8), self.write.data[:8])
+                                    ),
+                                    self.port.en.eq(0b10),
                                 ]
                                 m.next = "word.unaligned"
 
             with m.State("half.unaligned"):
                 m.d.sync += [
-                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
-                    sysmem_wr.en.eq(0b01),
+                    self.port.addr.eq(self.port.addr + 1),
+                    self.port.en.eq(0b01),
                 ]
                 m.next = "init"
 
             with m.State("word"):
                 m.d.sync += [
-                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
-                    sysmem_wr.data.eq(self.data[16:]),
-                    sysmem_wr.en.eq(0b11),
+                    self.port.addr.eq(self.port.addr + 1),
+                    self.port.data.eq(self.write.data[16:]),
+                    self.port.en.eq(0b11),
                 ]
                 m.next = "init"
 
             with m.State("word.unaligned"):
                 m.d.sync += [
-                    self.rdy.eq(0),
-                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
-                    sysmem_wr.data.eq(self.data[8:24]),
-                    sysmem_wr.en.eq(0b11),
+                    self.write.rdy.eq(0),
+                    self.port.addr.eq(self.port.addr + 1),
+                    self.port.data.eq(self.write.data[8:24]),
+                    self.port.en.eq(0b11),
                 ]
                 m.next = "word.unaligned.fish"
 
             with m.State("word.unaligned.fish"):
                 m.d.sync += [
-                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
-                    sysmem_wr.data.eq(self.data[24:]),
-                    sysmem_wr.en.eq(0b01),
+                    self.port.addr.eq(self.port.addr + 1),
+                    self.port.data.eq(self.write.data[24:]),
+                    self.port.en.eq(0b01),
                 ]
                 m.next = "init"
 

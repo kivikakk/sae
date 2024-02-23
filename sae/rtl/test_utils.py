@@ -6,6 +6,7 @@ from amaranth.sim import Simulator, Tick
 
 from . import State, Top
 from .rv32 import Reg
+from .test_mmu import pms
 
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
@@ -17,7 +18,7 @@ def run_until_fault(top):
     def bench():
         nonlocal results
         first = True
-        partial_read = None
+        insn = None
         written = set()
         print()
         while State.RUNNING == (yield top.state):
@@ -25,9 +26,9 @@ def run_until_fault(top):
                 first = False
             else:
                 yield Tick()
-            last_partial_read, partial_read = partial_read, (yield top.partial_read)
-            if partial_read != last_partial_read:
-                print(f"pc={(yield top.pc):08x} [{partial_read:0>8x}]  mem=", end="")
+            last_insn, insn = insn, (yield top.insn)
+            if insn != last_insn:
+                print(f"pc={(yield top.pc):08x} [{insn:0>8x}]  mem=", end="")
                 for i in range(min(top.sysmem.depth, 5)):
                     v = yield top.sysmem[i]
                     print(f"{v:0>4x} ", end="")
@@ -39,6 +40,7 @@ def run_until_fault(top):
                         rn = Reg[f"X{i}"].friendly
                         print(f"  {rn}={(yield top.xreg[i]):08x}", end="")
                 print()
+                yield from pms(mr=top.mmu.mmu_read, mw=top.mmu.mmu_write, prefix="  ")
 
         results["pc"] = yield top.pc
         for i in range(1, 32):

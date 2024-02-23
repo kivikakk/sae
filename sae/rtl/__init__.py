@@ -5,7 +5,7 @@ from typing import Optional
 from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal,
                       signed)
 from amaranth.lib.enum import IntEnum
-from amaranth.lib.memory import Memory, ReadPort, WritePort
+from amaranth.lib.memory import Memory
 
 from . import rv32
 from .mmu import MMU, AccessWidth
@@ -47,9 +47,6 @@ class Top(Elaboratable):
     reg_inits: Optional[dict[str, int]]
     track_reg_written: bool
 
-    sysmem_rd: ReadPort
-    sysmem_wr: WritePort
-
     state: Signal
     fault_code: Signal
     fault_insn: Signal
@@ -57,10 +54,9 @@ class Top(Elaboratable):
     xreg: Array[Signal]
     xreg_written: Optional[Array[Signal]]
     pc: Signal
-    partial_read: Signal
+    insn: Signal
 
     ls_reg: Signal
-    ls_off: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
@@ -80,10 +76,9 @@ class Top(Elaboratable):
             self.xreg_written = Array(Signal() for _ in range(self.XCOUNT))
 
         self.pc = Signal(self.XLEN)
-        self.partial_read = Signal(self.ILEN)
+        self.insn = Signal(self.ILEN)
 
         self.ls_reg = Signal(range(self.XCOUNT))
-        self.ls_off = Signal()
 
     @staticmethod
     def sysmem_for(path, *, memory):
@@ -128,8 +123,7 @@ class Top(Elaboratable):
             case _:
                 uart = None
 
-        mmu = m.submodules.mmu = MMU(self.sysmem)
-        sysmem_wr = self.sysmem.write_port(granularity=8)
+        self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
@@ -137,27 +131,26 @@ class Top(Elaboratable):
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
             with m.State("fetch.init"):
-                m.d.sync += [
-                    mmu.read.addr.eq(self.pc),
-                    mmu.read.width.eq(AccessWidth.WORD),
-                    # mmu.ack.eq(0),
-                ]
-                m.next = "fetch.wait"
-
                 with m.If(self.pc[:2].any()):
                     m.d.sync += self.fault(FaultCode.PC_MISALIGNED)
                     m.next = "faulted"
+                with m.Else():
+                    m.d.sync += [
+                        mmu.read.addr.eq(self.pc),
+                        mmu.read.width.eq(AccessWidth.WORD),
+                    ]
+                    m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.partial_read.eq(mmu.read.value)
+                    m.d.sync += self.insn.eq(mmu.read.value)
                     m.next = "fetch.resolve"
 
             with m.State("fetch.resolve"):
-                insn = self.partial_read
+                insn = self.insn
                 assert len(insn) == self.ILEN
                 with m.If((insn[:16] == 0) | (insn == C(1, 1).replicate(self.ILEN))):
-                    m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
+                    m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                     m.next = "faulted"
 
                 with m.Else():
@@ -190,13 +183,10 @@ class Top(Elaboratable):
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
-                            # Forcibly 16-bit aligned without a raise. Whoops
-                            # XXX
                             addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
                                     m.d.sync += [
-                                        self.pc.eq(self.pc),
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.WORD),
                                         self.ls_reg.eq(v_i.rd),
@@ -204,7 +194,6 @@ class Top(Elaboratable):
                                     m.next = "lw.delay"
                                 with m.Case(OpLoadFunct.LH):
                                     m.d.sync += [
-                                        self.pc.eq(self.pc),
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
@@ -212,7 +201,6 @@ class Top(Elaboratable):
                                     m.next = "lh.delay"
                                 with m.Case(OpLoadFunct.LHU):
                                     m.d.sync += [
-                                        self.pc.eq(self.pc),
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
@@ -220,27 +208,21 @@ class Top(Elaboratable):
                                     m.next = "lhu.delay"
                                 with m.Case(OpLoadFunct.LB):
                                     m.d.sync += [
-                                        self.pc.eq(self.pc),
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.ls_off.eq(
-                                            addr[0]
-                                        ),  # XXX redundant: read back from mmu.read.addr.
                                     ]
                                     m.next = "lb.delay"
                                 with m.Case(OpLoadFunct.LBU):
                                     m.d.sync += [
-                                        self.pc.eq(self.pc),
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.ls_off.eq(addr[0]),
                                     ]
                                     m.next = "lbu.delay"
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.MISC_MEM):
@@ -249,7 +231,7 @@ class Top(Elaboratable):
                                     pass  # XXX no-op
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.OP_IMM):
@@ -290,7 +272,7 @@ class Top(Elaboratable):
                                     )
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.OP):
@@ -343,7 +325,7 @@ class Top(Elaboratable):
                                     )
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.LUI):
@@ -355,35 +337,23 @@ class Top(Elaboratable):
                         with m.Case(Opcode.STORE):
                             imm = Cat(v_s.imm4_0, v_s.imm11_5)
                             addr = self.xreg[v_s.rs1] + imm.as_signed()
+                            m.d.sync += [
+                                mmu.write.addr.eq(addr),
+                                mmu.write.data.eq(self.xreg[v_s.rs2]),
+                                mmu.write.ack.eq(1),
+                            ]
+                            m.next = "s.delay"
+
                             with m.Switch(v_s.funct3):
                                 with m.Case(OpStoreFunct.SW):
-                                    # Forcibly 16-bit aligned without a raise.
-                                    # Sorry. XXX
-                                    m.d.sync += [
-                                        self.pc.eq(self.pc),
-                                        sysmem_wr.addr.eq(addr >> 1),
-                                        sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
-                                        sysmem_wr.en.eq(0b11),
-                                        self.ls_reg.eq(v_s.rs2),
-                                    ]
-                                    m.next = "sw.write1"
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
                                 with m.Case(OpStoreFunct.SH):
-                                    m.d.sync += [
-                                        sysmem_wr.addr.eq(addr >> 1),
-                                        sysmem_wr.data.eq(self.xreg[v_s.rs2][:16]),
-                                        sysmem_wr.en.eq(0b11),
-                                    ]
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.HALF)
                                 with m.Case(OpStoreFunct.SB):
-                                    m.d.sync += [
-                                        sysmem_wr.addr.eq(addr >> 1),
-                                        sysmem_wr.data.eq(
-                                            self.xreg[v_s.rs2][:8].replicate(2)
-                                        ),
-                                        sysmem_wr.en.eq(Mux(addr[0], 0b10, 0b01)),
-                                    ]
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.BRANCH):
@@ -421,7 +391,7 @@ class Top(Elaboratable):
                                         m.d.sync += self.pc.eq(self.pc + imm)
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Case(Opcode.JALR):
@@ -456,79 +426,58 @@ class Top(Elaboratable):
                                             m.d.sync += self.xreg[1].eq(0x77774444)
                                         with m.Default():
                                             m.d.sync += self.fault(
-                                                FaultCode.ILLEGAL_INSTRUCTION, insn
+                                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                             )
                                             m.next = "faulted"
                                 with m.Default():
                                     m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                                     m.next = "faulted"
                         with m.Default():
-                            m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn)
+                            m.d.sync += self.fault(
+                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                            )
                             m.next = "faulted"
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += [
-                        self.pc.eq(self.pc + 4),
-                        self.write_xreg(self.ls_reg, mmu.read.value),
-                    ]
+                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value)
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += [
-                        self.pc.eq(self.pc + 4),
-                        self.write_xreg(self.ls_reg, mmu.read.value[:16].as_signed()),
-                    ]
+                    m.d.sync += self.write_xreg(
+                        self.ls_reg, mmu.read.value[:16].as_signed()
+                    )
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += [
-                        self.pc.eq(self.pc + 4),
-                        self.write_xreg(self.ls_reg, mmu.read.value),
-                    ]
+                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value[:16])
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += [
-                        self.pc.eq(self.pc + 4),
-                        self.write_xreg(
-                            self.ls_reg,
-                            mmu.read.value[:8].as_signed()
-                            # sysmem_rd.data.word_select(self.ls_off, 8).as_signed(),
-                        ),
-                    ]
+                    m.d.sync += self.write_xreg(
+                        self.ls_reg, mmu.read.value[:8].as_signed()
+                    )
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += [
-                        self.pc.eq(self.pc + 4),
-                        self.write_xreg(
-                            self.ls_reg,
-                            mmu.read.value[:8]
-                            # self.ls_reg, sysmem_rd.data.word_select(self.ls_off, 8)
-                        ),
-                    ]
+                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value[:8])
                     m.next = "fetch.init"
 
-            # with m.State("s.delay"):
-            #     with m.If(mmu.read.rdy):
-            #         m.d.sync += self.pc.eq(self.pc + 4)
-            #         m.next = "fetch.init"
+            with m.State("s.delay"):
+                m.d.sync += mmu.write.ack.eq(0)
+                m.next = "s.wait"
 
-            with m.State("sw.write1"):
-                m.d.sync += [
-                    self.pc.eq(self.pc + 4),
-                    sysmem_wr.addr.eq(sysmem_wr.addr + 1),
-                    sysmem_wr.data.eq(self.xreg[self.ls_reg][16:]),
-                    sysmem_wr.en.eq(0b11),
-                ]
-                m.next = "fetch.init"
+            with m.State("s.wait"):
+                with m.If(mmu.write.rdy):
+                    # The one-cycle propagation delay here means we can count on
+                    # the write being finished by the next read.
+                    m.next = "fetch.init"
 
             with m.State("faulted"):
                 m.d.comb += self.state.eq(State.FAULTED)
@@ -543,7 +492,7 @@ class Top(Elaboratable):
             assigns.append(self.xreg_written[xn].eq(1))
         return assigns
 
-    def fault(self, code, insn=None):
+    def fault(self, code, *, insn=None):
         assigns = [self.fault_code.eq(code)]
         if insn is not None:
             assigns.append(self.fault_insn.eq(insn))

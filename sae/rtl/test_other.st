@@ -151,13 +151,13 @@ test_load_store_h:
 
 test_load_store_b:
     .init
-    li x1, 0x1234FEDC
+    li a0, 0x1234FEDC
     sw x0, 0(x0)
-    sb x1, 1(x0)
-    lhu x2, 0(x0)
-    lb x3, 1(x0)
-    lbu x4, 1(x0)
-    .assert x1=0x1234FEDC, x2=0x0000DC00, x3=0xFFFFFFDC, x4=0x000000DC
+    sb a0, 1(x0)
+    lhu a1, 0(x0)
+    lb a2, 1(x0)
+    lbu a3, 1(x0)
+    .assert a0=0x1234FEDC, a1=0x0000DC00, a2=0xFFFFFFDC, a3=0x000000DC
 
 test_fence:
     .init
