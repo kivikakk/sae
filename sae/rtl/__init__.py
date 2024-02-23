@@ -184,36 +184,22 @@ class Top(Elaboratable):
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
                             addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
+                            m.d.sync += mmu.read.addr.eq(addr)
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
-                                    m.d.sync += [
-                                        mmu.read.addr.eq(addr),
-                                        mmu.read.width.eq(AccessWidth.WORD),
-                                    ]
+                                    m.d.sync += mmu.read.width.eq(AccessWidth.WORD)
                                     m.next = "lw.delay"
                                 with m.Case(OpLoadFunct.LH):
-                                    m.d.sync += [
-                                        mmu.read.addr.eq(addr),
-                                        mmu.read.width.eq(AccessWidth.HALF),
-                                    ]
+                                    m.d.sync += mmu.read.width.eq(AccessWidth.HALF)
                                     m.next = "lh.delay"
                                 with m.Case(OpLoadFunct.LHU):
-                                    m.d.sync += [
-                                        mmu.read.addr.eq(addr),
-                                        mmu.read.width.eq(AccessWidth.HALF),
-                                    ]
+                                    m.d.sync += mmu.read.width.eq(AccessWidth.HALF)
                                     m.next = "lhu.delay"
                                 with m.Case(OpLoadFunct.LB):
-                                    m.d.sync += [
-                                        mmu.read.addr.eq(addr),
-                                        mmu.read.width.eq(AccessWidth.BYTE),
-                                    ]
+                                    m.d.sync += mmu.read.width.eq(AccessWidth.BYTE)
                                     m.next = "lb.delay"
                                 with m.Case(OpLoadFunct.LBU):
-                                    m.d.sync += [
-                                        mmu.read.addr.eq(addr),
-                                        mmu.read.width.eq(AccessWidth.BYTE),
-                                    ]
+                                    m.d.sync += mmu.read.width.eq(AccessWidth.BYTE)
                                     m.next = "lbu.delay"
                                 with m.Default():
                                     m.d.sync += self.fault(
@@ -442,9 +428,7 @@ class Top(Elaboratable):
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(
-                        v_i.rd, mmu.read.value[:16].as_signed()
-                    )
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
@@ -454,9 +438,7 @@ class Top(Elaboratable):
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(
-                        v_i.rd, mmu.read.value[:8].as_signed()
-                    )
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):

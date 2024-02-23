@@ -166,6 +166,7 @@ class OpBranchFunct(IntEnum, shape=3):
 
 
 class OpLoadFunct(IntEnum, shape=3):
+    # Note the bottom 2 bits convey the size the same as AccessWidth.
     LB = 0b000
     LH = 0b001
     LW = 0b010
