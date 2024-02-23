@@ -144,300 +144,302 @@ class Top(Elaboratable):
                 # Does that sentence even make sense?)
                 with m.If(mmu.read.valid):
                     m.d.sync += self.insn.eq(mmu.read.value)
-                    insn = mmu.read.value
-                    assert len(insn) == self.ILEN
-                    with m.If((insn[:16] == 0) | (insn == C(1, 1).replicate(self.ILEN))):
-                        m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
-                        m.next = "faulted"
+                    m.next = "fetch.resolve"
 
-                    with m.Else():
-                        v_i = InsI(insn)
-                        v_u = InsU(insn)
-                        v_r = InsR(insn)
-                        v_j = InsJ(insn)
-                        v_b = InsB(insn)
-                        v_s = InsS(insn)
+            with m.State("fetch.resolve"):
+                insn = self.insn
+                assert len(insn) == self.ILEN
+                with m.If((insn[:16] == 0) | (insn == C(1, 1).replicate(self.ILEN))):
+                    m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+                    m.next = "faulted"
 
-                        # sx I imm to XLEN
-                        v_sxi = Signal(signed(32))
-                        m.d.comb += v_sxi.eq(v_i.imm.as_signed())
+                with m.Else():
+                    v_i = InsI(insn)
+                    v_u = InsU(insn)
+                    v_r = InsR(insn)
+                    v_j = InsJ(insn)
+                    v_b = InsB(insn)
+                    v_s = InsS(insn)
 
-                        # set pc/next before processing opcode so they can be
-                        # overridden, set x0 after so it remains zero (lol).
-                        m.next = "fetch.init"
-                        m.d.sync += self.pc.eq(self.pc + 4)
+                    # sx I imm to XLEN
+                    v_sxi = Signal(signed(32))
+                    m.d.comb += v_sxi.eq(v_i.imm.as_signed())
 
-                        if uart:
-                            last_x10 = Signal.like(self.xreg[0])
-                            m.d.sync += last_x10.eq(self.xreg[10])
-                            with m.If(self.xreg[10] != last_x10):
-                                m.d.sync += [
-                                    uart.wr_data.eq(self.xreg[10]),
-                                    uart.wr_en.eq(1),
-                                ]
-                            with m.Else():
-                                m.d.sync += uart.wr_en.eq(0)
+                    # set pc/next before processing opcode so they can be
+                    # overridden, set x0 after so it remains zero (lol).
+                    m.next = "fetch.init"
+                    m.d.sync += self.pc.eq(self.pc + 4)
 
-                        with m.Switch(v_i.opcode):
-                            with m.Case(Opcode.LOAD):
-                                addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
-                                m.d.sync += mmu.read.addr.eq(addr)
-                                m.d.sync += mmu.read.width.eq(v_i.funct3[:2])
-                                with m.Switch(v_i.funct3):
-                                    with m.Case(OpLoadFunct.LW):
-                                        m.next = "lw.delay"
-                                    with m.Case(OpLoadFunct.LH):
-                                        m.next = "lh.delay"
-                                    with m.Case(OpLoadFunct.LHU):
-                                        m.next = "lhu.delay"
-                                    with m.Case(OpLoadFunct.LB):
-                                        m.next = "lb.delay"
-                                    with m.Case(OpLoadFunct.LBU):
-                                        m.next = "lbu.delay"
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                    if uart:
+                        last_x10 = Signal.like(self.xreg[0])
+                        m.d.sync += last_x10.eq(self.xreg[10])
+                        with m.If(self.xreg[10] != last_x10):
+                            m.d.sync += [
+                                uart.wr_data.eq(self.xreg[10]),
+                                uart.wr_en.eq(1),
+                            ]
+                        with m.Else():
+                            m.d.sync += uart.wr_en.eq(0)
+
+                    with m.Switch(v_i.opcode):
+                        with m.Case(Opcode.LOAD):
+                            addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
+                            m.d.sync += mmu.read.addr.eq(addr)
+                            m.d.sync += mmu.read.width.eq(v_i.funct3[:2])
+                            with m.Switch(v_i.funct3):
+                                with m.Case(OpLoadFunct.LW):
+                                    m.next = "lw.delay"
+                                with m.Case(OpLoadFunct.LH):
+                                    m.next = "lh.delay"
+                                with m.Case(OpLoadFunct.LHU):
+                                    m.next = "lhu.delay"
+                                with m.Case(OpLoadFunct.LB):
+                                    m.next = "lb.delay"
+                                with m.Case(OpLoadFunct.LBU):
+                                    m.next = "lbu.delay"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.MISC_MEM):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(OpMiscMemFunct.FENCE):
+                                    pass  # XXX no-op
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.OP_IMM):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(OpImmFunct.ADDI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] + v_sxi
+                                    )
+                                with m.Case(OpImmFunct.SLTI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1].as_signed() < v_sxi
+                                    )
+                                with m.Case(OpImmFunct.SLTIU):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] < v_sxi.as_unsigned()
+                                    )
+                                with m.Case(OpImmFunct.ANDI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] & v_sxi
+                                    )
+                                with m.Case(OpImmFunct.ORI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] | v_sxi
+                                    )
+                                with m.Case(OpImmFunct.XORI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] ^ v_sxi
+                                    )
+                                with m.Case(OpImmFunct.SLLI):
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, self.xreg[v_i.rs1] << v_i.imm[:5]
+                                    )
+                                with m.Case(OpImmFunct.SRI):
+                                    rs1 = self.xreg[v_i.rs1]
+                                    rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
+                                    m.d.sync += self.write_xreg(
+                                        v_i.rd, rs1 >> v_i.imm[:5]
+                                    )
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.OP):
+                            with m.Switch(v_r.funct3):
+                                with m.Case(OpRegFunct.ADDSUB):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        Mux(
+                                            v_r.funct7[5],
+                                            self.xreg[v_r.rs1] - self.xreg[v_r.rs2],
+                                            self.xreg[v_r.rs1] + self.xreg[v_r.rs2],
+                                        ),
+                                    )
+                                with m.Case(OpRegFunct.SLT):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        self.xreg[v_r.rs1].as_signed()
+                                        < self.xreg[v_r.rs2].as_signed(),
+                                    )
+                                with m.Case(OpRegFunct.SLTU):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] < self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.AND):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] & self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.OR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] | self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.XOR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd, self.xreg[v_r.rs1] ^ self.xreg[v_r.rs2]
+                                    )
+                                with m.Case(OpRegFunct.SLL):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        self.xreg[v_r.rs1] << self.xreg[v_r.rs2][:5],
+                                    )
+                                with m.Case(OpRegFunct.SR):
+                                    m.d.sync += self.write_xreg(
+                                        v_r.rd,
+                                        Mux(
+                                            v_r.funct7[5],
+                                            self.xreg[v_r.rs1].as_signed(),
+                                            self.xreg[v_r.rs1],
                                         )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.MISC_MEM):
-                                with m.Switch(v_i.funct3):
-                                    with m.Case(OpMiscMemFunct.FENCE):
-                                        pass  # XXX no-op
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.OP_IMM):
-                                with m.Switch(v_i.funct3):
-                                    with m.Case(OpImmFunct.ADDI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] + v_sxi
-                                        )
-                                    with m.Case(OpImmFunct.SLTI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1].as_signed() < v_sxi
-                                        )
-                                    with m.Case(OpImmFunct.SLTIU):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] < v_sxi.as_unsigned()
-                                        )
-                                    with m.Case(OpImmFunct.ANDI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] & v_sxi
-                                        )
-                                    with m.Case(OpImmFunct.ORI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] | v_sxi
-                                        )
-                                    with m.Case(OpImmFunct.XORI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] ^ v_sxi
-                                        )
-                                    with m.Case(OpImmFunct.SLLI):
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, self.xreg[v_i.rs1] << v_i.imm[:5]
-                                        )
-                                    with m.Case(OpImmFunct.SRI):
-                                        rs1 = self.xreg[v_i.rs1]
-                                        rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
-                                        m.d.sync += self.write_xreg(
-                                            v_i.rd, rs1 >> v_i.imm[:5]
-                                        )
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.OP):
-                                with m.Switch(v_r.funct3):
-                                    with m.Case(OpRegFunct.ADDSUB):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd,
-                                            Mux(
-                                                v_r.funct7[5],
-                                                self.xreg[v_r.rs1] - self.xreg[v_r.rs2],
-                                                self.xreg[v_r.rs1] + self.xreg[v_r.rs2],
-                                            ),
-                                        )
-                                    with m.Case(OpRegFunct.SLT):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd,
-                                            self.xreg[v_r.rs1].as_signed()
-                                            < self.xreg[v_r.rs2].as_signed(),
-                                        )
-                                    with m.Case(OpRegFunct.SLTU):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd, self.xreg[v_r.rs1] < self.xreg[v_r.rs2]
-                                        )
-                                    with m.Case(OpRegFunct.AND):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd, self.xreg[v_r.rs1] & self.xreg[v_r.rs2]
-                                        )
-                                    with m.Case(OpRegFunct.OR):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd, self.xreg[v_r.rs1] | self.xreg[v_r.rs2]
-                                        )
-                                    with m.Case(OpRegFunct.XOR):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd, self.xreg[v_r.rs1] ^ self.xreg[v_r.rs2]
-                                        )
-                                    with m.Case(OpRegFunct.SLL):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd,
-                                            self.xreg[v_r.rs1] << self.xreg[v_r.rs2][:5],
-                                        )
-                                    with m.Case(OpRegFunct.SR):
-                                        m.d.sync += self.write_xreg(
-                                            v_r.rd,
-                                            Mux(
-                                                v_r.funct7[5],
-                                                self.xreg[v_r.rs1].as_signed(),
-                                                self.xreg[v_r.rs1],
+                                        >> self.xreg[v_r.rs2][:5],
+                                    )
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.LUI):
+                            m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
+                        with m.Case(Opcode.AUIPC):
+                            m.d.sync += self.write_xreg(
+                                v_u.rd, (v_u.imm << 12) + self.pc
+                            )
+                        with m.Case(Opcode.STORE):
+                            imm = Cat(v_s.imm4_0, v_s.imm11_5)
+                            addr = self.xreg[v_s.rs1] + imm.as_signed()
+                            m.d.sync += [
+                                mmu.write.addr.eq(addr),
+                                mmu.write.data.eq(self.xreg[v_s.rs2]),
+                                mmu.write.ack.eq(1),
+                            ]
+                            m.next = "s.delay"
+
+                            with m.Switch(v_s.funct3):
+                                with m.Case(OpStoreFunct.SW):
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
+                                with m.Case(OpStoreFunct.SH):
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.HALF)
+                                with m.Case(OpStoreFunct.SB):
+                                    m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.BRANCH):
+                            # TODO: we're meant to raise
+                            # instruction-address-misaligned if the target
+                            # address isn't 4-byte aligned (modulo RVC) **iff**
+                            # the condition evaluates to true.
+                            imm = Cat(  # meow :3
+                                C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
+                            ).as_signed()
+                            with m.Switch(v_b.funct3):
+                                with m.Case(OpBranchFunct.BEQ):
+                                    with m.If(self.xreg[v_b.rs1] == self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BNE):
+                                    with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BLT):
+                                    with m.If(
+                                        self.xreg[v_b.rs1].as_signed()
+                                        < self.xreg[v_b.rs2].as_signed()
+                                    ):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BGE):
+                                    with m.If(
+                                        self.xreg[v_b.rs1].as_signed()
+                                        >= self.xreg[v_b.rs2].as_signed()
+                                    ):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BLTU):
+                                    with m.If(self.xreg[v_b.rs1] < self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Case(OpBranchFunct.BGEU):
+                                    with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
+                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Case(Opcode.JALR):
+                            m.d.sync += [
+                                self.write_xreg(v_i.rd, self.pc + 4),
+                                self.pc.eq(
+                                    (self.xreg[v_i.rs1] + v_i.imm.as_signed())
+                                    & 0xFFFFFFFE
+                                ),
+                            ]
+                        with m.Case(Opcode.JAL):
+                            m.d.sync += [
+                                self.write_xreg(v_j.rd, self.pc + 4),
+                                self.pc.eq(
+                                    self.pc
+                                    + Cat(  # meow! :|3
+                                        C(0, 1),
+                                        v_j.imm10_1,
+                                        v_j.imm11,
+                                        v_j.imm19_12,
+                                        v_j.imm20,
+                                    ).as_signed()
+                                ),
+                            ]
+                        with m.Case(Opcode.SYSTEM):
+                            with m.Switch(v_i.funct3):
+                                with m.Case(0):
+                                    with m.Switch(v_i.imm):
+                                        with m.Case(OpSystemFunct.ECALL >> 3):
+                                            m.d.sync += self.write_xreg(1, 0x1234CAFE)
+                                        with m.Case(OpSystemFunct.EBREAK >> 3):
+                                            m.d.sync += self.xreg[1].eq(0x77774444)
+                                        with m.Default():
+                                            m.d.sync += self.fault(
+                                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                             )
-                                            >> self.xreg[v_r.rs2][:5],
-                                        )
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.LUI):
-                                m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
-                            with m.Case(Opcode.AUIPC):
-                                m.d.sync += self.write_xreg(
-                                    v_u.rd, (v_u.imm << 12) + self.pc
-                                )
-                            with m.Case(Opcode.STORE):
-                                imm = Cat(v_s.imm4_0, v_s.imm11_5)
-                                addr = self.xreg[v_s.rs1] + imm.as_signed()
-                                m.d.sync += [
-                                    mmu.write.addr.eq(addr),
-                                    mmu.write.data.eq(self.xreg[v_s.rs2]),
-                                    mmu.write.ack.eq(1),
-                                ]
-                                m.next = "s.delay"
+                                            m.next = "faulted"
+                                with m.Default():
+                                    m.d.sync += self.fault(
+                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    )
+                                    m.next = "faulted"
+                        with m.Default():
+                            m.d.sync += self.fault(
+                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                            )
+                            m.next = "faulted"
 
-                                with m.Switch(v_s.funct3):
-                                    with m.Case(OpStoreFunct.SW):
-                                        m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
-                                    with m.Case(OpStoreFunct.SH):
-                                        m.d.sync += mmu.write.width.eq(AccessWidth.HALF)
-                                    with m.Case(OpStoreFunct.SB):
-                                        m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.BRANCH):
-                                # TODO: we're meant to raise
-                                # instruction-address-misaligned if the target
-                                # address isn't 4-byte aligned (modulo RVC) **iff**
-                                # the condition evaluates to true.
-                                imm = Cat(  # meow :3
-                                    C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
-                                ).as_signed()
-                                with m.Switch(v_b.funct3):
-                                    with m.Case(OpBranchFunct.BEQ):
-                                        with m.If(self.xreg[v_b.rs1] == self.xreg[v_b.rs2]):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Case(OpBranchFunct.BNE):
-                                        with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Case(OpBranchFunct.BLT):
-                                        with m.If(
-                                            self.xreg[v_b.rs1].as_signed()
-                                            < self.xreg[v_b.rs2].as_signed()
-                                        ):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Case(OpBranchFunct.BGE):
-                                        with m.If(
-                                            self.xreg[v_b.rs1].as_signed()
-                                            >= self.xreg[v_b.rs2].as_signed()
-                                        ):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Case(OpBranchFunct.BLTU):
-                                        with m.If(self.xreg[v_b.rs1] < self.xreg[v_b.rs2]):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Case(OpBranchFunct.BGEU):
-                                        with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
-                                            m.d.sync += self.pc.eq(self.pc + imm)
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Case(Opcode.JALR):
-                                m.d.sync += [
-                                    self.write_xreg(v_i.rd, self.pc + 4),
-                                    self.pc.eq(
-                                        (self.xreg[v_i.rs1] + v_i.imm.as_signed())
-                                        & 0xFFFFFFFE
-                                    ),
-                                ]
-                            with m.Case(Opcode.JAL):
-                                m.d.sync += [
-                                    self.write_xreg(v_j.rd, self.pc + 4),
-                                    self.pc.eq(
-                                        self.pc
-                                        + Cat(  # meow! :|3
-                                            C(0, 1),
-                                            v_j.imm10_1,
-                                            v_j.imm11,
-                                            v_j.imm19_12,
-                                            v_j.imm20,
-                                        ).as_signed()
-                                    ),
-                                ]
-                            with m.Case(Opcode.SYSTEM):
-                                with m.Switch(v_i.funct3):
-                                    with m.Case(0):
-                                        with m.Switch(v_i.imm):
-                                            with m.Case(OpSystemFunct.ECALL >> 3):
-                                                m.d.sync += self.write_xreg(1, 0x1234CAFE)
-                                            with m.Case(OpSystemFunct.EBREAK >> 3):
-                                                m.d.sync += self.xreg[1].eq(0x77774444)
-                                            with m.Default():
-                                                m.d.sync += self.fault(
-                                                    FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                                )
-                                                m.next = "faulted"
-                                    with m.Default():
-                                        m.d.sync += self.fault(
-                                            FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                        )
-                                        m.next = "faulted"
-                            with m.Default():
-                                m.d.sync += self.fault(
-                                    FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                                )
-                                m.next = "faulted"
-
-            load_rd = InsI(self.insn).rd
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(load_rd, mmu.read.value)
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value)
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(load_rd, mmu.read.value[:16].as_signed())
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(load_rd, mmu.read.value[:16])
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16])
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(load_rd, mmu.read.value[:8].as_signed())
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(load_rd, mmu.read.value[:8])
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8])
                     m.next = "fetch.init"
 
             with m.State("s.delay"):
