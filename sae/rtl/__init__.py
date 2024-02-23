@@ -194,7 +194,6 @@ class Top(Elaboratable):
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.WORD),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.insn.eq(OpLoadFunct.LW),
                                     ]
                                     m.next = "l.delay"
                                 with m.Case(OpLoadFunct.LH):
@@ -202,7 +201,6 @@ class Top(Elaboratable):
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.insn.eq(OpLoadFunct.LH),
                                     ]
                                     m.next = "l.delay"
                                 with m.Case(OpLoadFunct.LHU):
@@ -210,7 +208,6 @@ class Top(Elaboratable):
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.insn.eq(OpLoadFunct.LHU),
                                     ]
                                     m.next = "l.delay"
                                 with m.Case(OpLoadFunct.LB):
@@ -218,7 +215,6 @@ class Top(Elaboratable):
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.insn.eq(OpLoadFunct.LB),
                                     ]
                                     m.next = "l.delay"
                                 with m.Case(OpLoadFunct.LBU):
@@ -226,7 +222,6 @@ class Top(Elaboratable):
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
                                         self.ls_reg.eq(v_i.rd),
-                                        self.insn.eq(OpLoadFunct.LBU),
                                     ]
                                     m.next = "l.delay"
                                 with m.Default():
@@ -451,7 +446,7 @@ class Top(Elaboratable):
 
             with m.State("l.delay"):
                 with m.If(mmu.read.valid):
-                    with m.Switch(self.insn):
+                    with m.Switch(v_i.funct3):
                         with m.Case(OpLoadFunct.LW):
                             m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value)
                         with m.Case(OpLoadFunct.LH):
