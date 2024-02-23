@@ -185,21 +185,17 @@ class Top(Elaboratable):
                         with m.Case(Opcode.LOAD):
                             addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
                             m.d.sync += mmu.read.addr.eq(addr)
+                            m.d.sync += mmu.read.width.eq(v_i.funct3[:2])
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
-                                    m.d.sync += mmu.read.width.eq(AccessWidth.WORD)
                                     m.next = "lw.delay"
                                 with m.Case(OpLoadFunct.LH):
-                                    m.d.sync += mmu.read.width.eq(AccessWidth.HALF)
                                     m.next = "lh.delay"
                                 with m.Case(OpLoadFunct.LHU):
-                                    m.d.sync += mmu.read.width.eq(AccessWidth.HALF)
                                     m.next = "lhu.delay"
                                 with m.Case(OpLoadFunct.LB):
-                                    m.d.sync += mmu.read.width.eq(AccessWidth.BYTE)
                                     m.next = "lb.delay"
                                 with m.Case(OpLoadFunct.LBU):
-                                    m.d.sync += mmu.read.width.eq(AccessWidth.BYTE)
                                     m.next = "lbu.delay"
                                 with m.Default():
                                     m.d.sync += self.fault(
