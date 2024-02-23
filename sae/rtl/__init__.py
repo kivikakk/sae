@@ -56,8 +56,6 @@ class Top(Elaboratable):
     pc: Signal
     insn: Signal
 
-    ls_reg: Signal
-
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent / "test_shrimple.bin", memory=8192
@@ -77,8 +75,6 @@ class Top(Elaboratable):
 
         self.pc = Signal(self.XLEN)
         self.insn = Signal(self.ILEN)
-
-        self.ls_reg = Signal(range(self.XCOUNT))
 
     @staticmethod
     def sysmem_for(path, *, memory):
@@ -193,35 +189,30 @@ class Top(Elaboratable):
                                     m.d.sync += [
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.WORD),
-                                        self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lw.delay"
                                 with m.Case(OpLoadFunct.LH):
                                     m.d.sync += [
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
-                                        self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lh.delay"
                                 with m.Case(OpLoadFunct.LHU):
                                     m.d.sync += [
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.HALF),
-                                        self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lhu.delay"
                                 with m.Case(OpLoadFunct.LB):
                                     m.d.sync += [
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
-                                        self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lb.delay"
                                 with m.Case(OpLoadFunct.LBU):
                                     m.d.sync += [
                                         mmu.read.addr.eq(addr),
                                         mmu.read.width.eq(AccessWidth.BYTE),
-                                        self.ls_reg.eq(v_i.rd),
                                     ]
                                     m.next = "lbu.delay"
                                 with m.Default():
@@ -446,31 +437,31 @@ class Top(Elaboratable):
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value)
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value)
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
                     m.d.sync += self.write_xreg(
-                        self.ls_reg, mmu.read.value[:16].as_signed()
+                        v_i.rd, mmu.read.value[:16].as_signed()
                     )
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value[:16])
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16])
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
                     m.d.sync += self.write_xreg(
-                        self.ls_reg, mmu.read.value[:8].as_signed()
+                        v_i.rd, mmu.read.value[:8].as_signed()
                     )
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(self.ls_reg, mmu.read.value[:8])
+                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8])
                     m.next = "fetch.init"
 
             with m.State("s.delay"):
