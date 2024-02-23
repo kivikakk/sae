@@ -154,12 +154,19 @@ class Top(Elaboratable):
                     m.next = "faulted"
 
                 with m.Else():
-                    v_i = InsI(insn)
-                    v_u = InsU(insn)
-                    v_r = InsR(insn)
-                    v_j = InsJ(insn)
-                    v_b = InsB(insn)
-                    v_s = InsS(insn)
+                    v_i = Signal(InsI)
+                    v_u = Signal(InsU)
+                    v_r = Signal(InsR)
+                    v_j = Signal(InsJ)
+                    v_b = Signal(InsB)
+                    v_s = Signal(InsS)
+
+                    m.d.comb += v_i.eq(InsI(insn))
+                    m.d.comb += v_u.eq(InsU(insn))
+                    m.d.comb += v_r.eq(InsR(insn))
+                    m.d.comb += v_j.eq(InsJ(insn))
+                    m.d.comb += v_b.eq(InsB(insn))
+                    m.d.comb += v_s.eq(InsS(insn))
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
