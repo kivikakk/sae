@@ -1,7 +1,7 @@
 from amaranth import C, Cat, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory, ReadPort, WritePort
-from amaranth.lib.wiring import Component, In, Out, Signature, connect, flipped
+from amaranth.lib.wiring import Component, In, Out, Signature, connect
 from amaranth.utils import ceil_log2
 
 __all__ = ["MMU", "AccessWidth"]
@@ -39,8 +39,8 @@ class MMUWriteBusSignature(Signature):
 
 
 class MMU(Component):
-    read: Out(MMUReadBusSignature(32, 32))
-    write: Out(MMUWriteBusSignature(32, 32))
+    read: In(MMUReadBusSignature(32, 32))
+    write: In(MMUWriteBusSignature(32, 32))
     mmu_read: "MMURead"
     mmu_write: "MMUWrite"
     sysmem: Memory
@@ -55,11 +55,11 @@ class MMU(Component):
 
         m.submodules.sysmem = sysmem = self.sysmem
         self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem)
-        connect(m, flipped(self.read), mmu_read.read)
+        connect(m, self.read, mmu_read.read)
         connect(m, sysmem.read_port(), mmu_read.port)
 
         self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem)
-        connect(m, flipped(self.write), mmu_write.write)
+        connect(m, self.write, mmu_write.write)
         connect(m, sysmem.write_port(granularity=8), mmu_write.port)
 
         return m
