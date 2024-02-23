@@ -142,6 +142,10 @@ class Top(Elaboratable):
                     m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
+                # Timing-wise we could remove a cycle here, but the resulting IL
+                # grows significantly so I assume it complicates matters. (Can
+                # we buffer it combinatorically in a way that actually helps?
+                # Does that sentence even make sense?)
                 with m.If(mmu.read.valid):
                     m.d.sync += self.insn.eq(mmu.read.value)
                     m.next = "fetch.resolve"
@@ -471,9 +475,6 @@ class Top(Elaboratable):
 
             with m.State("s.delay"):
                 m.d.sync += mmu.write.ack.eq(0)
-                m.next = "s.wait"
-
-            with m.State("s.wait"):
                 with m.If(mmu.write.rdy):
                     # The one-cycle propagation delay here means we can count on
                     # the write being finished by the next read.
