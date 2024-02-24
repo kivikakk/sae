@@ -1,8 +1,10 @@
 from functools import singledispatch
 from pathlib import Path
 
+from amaranth import Fragment, Memory
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
+from rainhdx import Platform
 
 from . import State, Top
 from .rv32 import Reg
@@ -30,11 +32,7 @@ def run_until_fault(top):
                 uart.append((yield top.uart.wr_data))
             last_insn, insn = insn, (yield top.insn)
             if insn != last_insn:
-                print(f"pc={(yield top.pc):08x} [{insn:0>8x}]  mem=", end="")
-                for i in range(min(top.sysmem.depth, 5)):
-                    v = yield top.sysmem[i]
-                    print(f"{v:0>4x} ", end="")
-
+                print(f"pc={(yield top.pc):08x} [{insn:0>8x}]", end="")
                 for i in range(1, 32):
                     v = yield top.xreg[i]
                     if i in written or v:
@@ -42,7 +40,13 @@ def run_until_fault(top):
                         rn = Reg[f"X{i}"].friendly
                         print(f"  {rn}={(yield top.xreg[i]):08x}", end="")
                 print()
-                yield from pms(mr=top.mmu.mmu_read, mw=top.mmu.mmu_write, prefix="  ")
+                yield from pms(
+                    mr=top.mmu.mmu_read,
+                    mw=top.mmu.mmu_write,
+                    sysmem=top.sysmem,
+                    prefix="  ",
+                )
+                print()
 
         results["pc"] = yield top.pc
         for i in range(1, 32):
@@ -53,7 +57,7 @@ def run_until_fault(top):
         if uart:
             results["uart"] = bytes(uart)
 
-    sim = Simulator(top)
+    sim = Simulator(Fragment.get(top, platform=Platform["test"]))
     sim.add_clock(1e6)
     sim.add_testbench(bench)
     sim.run()

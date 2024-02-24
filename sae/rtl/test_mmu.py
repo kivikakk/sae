@@ -1,13 +1,12 @@
 import unittest
 from functools import partial
 
-from amaranth import Module
+from amaranth import Fragment
 from amaranth.lib.memory import Memory
-from amaranth.lib.wiring import Component, Out, connect, flipped
 from amaranth.sim import Simulator, Tick
+from rainhdx import Platform
 
-from .mmu import (MMU, AccessWidth, MMURead, MMUReadBusSignature, MMUWrite,
-                  MMUWriteBusSignature)
+from .mmu import MMU, AccessWidth
 
 
 def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
@@ -15,10 +14,11 @@ def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
         print(
             f"{prefix}MMUR: "
             f"addr={(yield mr.read.addr):0>8x}  width={AccessWidth((yield mr.read.width))}  "
-            f"value={(yield mr.read.value):0>8x}  valid={(yield mr.read.valid):b}         data=",
+            f"value={(yield mr.read.value):0>8x}  valid={(yield mr.read.valid):b}         ",
             end="",
         )
         if sysmem:
+            print("data=", end="")
             for i in range(min(4, sysmem.depth)):
                 print(f"{(yield sysmem[i]):0>4x} ", end="")
         print()
@@ -26,10 +26,11 @@ def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
         print(
             f"{prefix}MMUW: "
             f"addr={(yield mw.write.addr):0>8x}  width={AccessWidth((yield mw.write.width))}  "
-            f"data= {(yield mw.write.data):0>8x}  rdy={(yield mw.write.rdy):b}  ack={(yield mw.write.ack):b}    data=",
+            f"data= {(yield mw.write.data):0>8x}  rdy={(yield mw.write.rdy):b}  ack={(yield mw.write.ack):b}    ",
             end="",
         )
         if sysmem and not mr:
+            print("data=", end="")
             for i in range(min(4, sysmem.depth)):
                 print(f"{(yield sysmem[i]):0>4x} ", end="")
         print()
@@ -109,7 +110,7 @@ class TestBase:
 class TestMMU(unittest.TestCase, TestBase):
     def simTestbench(self, bench, init):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
-        sim = Simulator(mmu)
+        sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
         sim.add_clock(1e-6)
         sim.add_testbench(partial(bench, top=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
         sim.run()
