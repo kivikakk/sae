@@ -76,6 +76,9 @@ class Top(Elaboratable):
         self.pc = Signal(self.XLEN)
         self.insn = Signal(self.ILEN)
 
+        self.wb_reg = Signal(range(self.XCOUNT))
+        self.wb_val = Signal(self.XLEN)
+
     @staticmethod
     def sysmem_for(path, *, memory):
         inp = path.read_bytes()
@@ -127,6 +130,13 @@ class Top(Elaboratable):
             # Blowing everything ridiculously apart before we start getting a
             # pipeline going.
             with m.State("fetch.init"):
+                with m.If(self.wb_reg != 0):
+                    m.d.sync += [
+                        self.xreg[self.wb_reg].eq(self.wb_val),
+                        self.wb_reg.eq(0),
+                    ]
+                    if self.track_reg_written:
+                        m.d.sync += self.xreg_written[self.wb_reg].eq(1)
                 with m.If(self.pc[:2].any()):
                     m.d.sync += self.fault(FaultCode.PC_MISALIGNED)
                     m.next = "faulted"
@@ -138,10 +148,6 @@ class Top(Elaboratable):
                     m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
-                # Timing-wise we could remove a cycle here, but the resulting IL
-                # grows significantly so I assume it complicates matters. (Can
-                # we buffer it combinatorically in a way that actually helps?
-                # Does that sentence even make sense?)
                 with m.If(mmu.read.valid):
                     m.d.sync += self.insn.eq(mmu.read.value)
                     m.next = "fetch.resolve"
@@ -184,8 +190,11 @@ class Top(Elaboratable):
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):
                             addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
-                            m.d.sync += mmu.read.addr.eq(addr)
-                            m.d.sync += mmu.read.width.eq(v_i.funct3[:2])
+                            m.d.sync += [
+                                mmu.read.addr.eq(addr),
+                                mmu.read.width.eq(v_i.funct3[:2]),
+                                self.wb_reg.eq(v_i.rd),
+                            ]
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpLoadFunct.LW):
                                     m.next = "lw.delay"
@@ -419,27 +428,27 @@ class Top(Elaboratable):
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value)
+                    m.d.sync += self.wb_val.eq(mmu.read.value)
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16].as_signed())
+                    m.d.sync += self.wb_val.eq(mmu.read.value[:16].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:16])
+                    m.d.sync += self.wb_val.eq(mmu.read.value[:16])
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8].as_signed())
+                    m.d.sync += self.wb_val.eq(mmu.read.value[:8].as_signed())
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.write_xreg(v_i.rd, mmu.read.value[:8])
+                    m.d.sync += self.wb_val.eq(mmu.read.value[:8])
                     m.next = "fetch.init"
 
             with m.State("s.delay"):
@@ -457,10 +466,10 @@ class Top(Elaboratable):
         return m
 
     def write_xreg(self, xn, value):
-        assigns = [self.xreg[xn].eq(value)]
-        if self.track_reg_written:
-            assigns.append(self.xreg_written[xn].eq(1))
-        return assigns
+        return [
+            self.wb_reg.eq(xn),
+            self.wb_val.eq(value),
+        ]
 
     def fault(self, code, *, insn=None):
         assigns = [self.fault_code.eq(code)]
