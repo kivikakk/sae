@@ -99,7 +99,6 @@ class Top(Elaboratable):
                     raise RuntimeError("!?")
         return init
 
-
     def reg_reset(self, xn):
         if xn == 0:
             return 0

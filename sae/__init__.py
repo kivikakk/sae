@@ -16,11 +16,11 @@ class icebreaker(ICEBreakerPlatform, rainhdx.Platform):
     pass
 
 
-class test(rainhdx.Platform):
-    @property
-    def default_clk_frequency(self):
-        return 1e6
+class plats:
+    class test(rainhdx.Platform):
+        @property
+        def default_clk_frequency(self):
+            return 1e6
 
-
-class formal(test):
-    pass
+    class formal(test):
+        pass

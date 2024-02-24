@@ -24,7 +24,7 @@ class UART(Component):
     def elaborate(self, platform):
         m = Module()
 
-        freq = getattr(platform, 'default_clk_frequency', 1e6)
+        freq = getattr(platform, "default_clk_frequency", 1e6)
 
         m.submodules.fifo = self._fifo
         m.d.comb += [

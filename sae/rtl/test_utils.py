@@ -14,7 +14,7 @@ __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
 
 @singledispatch
-def run_until_fault(top, *, max_cycles):
+def run_until_fault(top, *, max_cycles=1000):
     results = {}
 
     def bench():
@@ -103,7 +103,7 @@ class InsnTestHelpers:
             reg_inits=regs,
             track_reg_written=True,
         )
-        self.results = run_until_fault(top, max_cycles=1000)
+        self.results = run_until_fault(top)
         self.body = None
         self.__asserted = set(
             ["pc", "faultcode", "faultinsn"]

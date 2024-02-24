@@ -1,8 +1,6 @@
 import unittest
 from pathlib import Path
 
-from amaranth.lib.memory import Memory
-
 from . import FaultCode, State, Top
 from .rv32 import Reg
 from .test_utils import run_until_fault
