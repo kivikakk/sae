@@ -2,11 +2,9 @@ ASFLAGS = -march=rv32i -mabi=ilp32
 CFLAGS  = -march=rv32i -mabi=ilp32 -O2
 LDFLAGS = -T linker.ld
 
-TARGETS = shrimple.bin
+all: ../sae/rtl/test_shrimple.bin ../sae/rtl/test_shrimprw.bin
 
-all: ../sae/rtl/test_shrimple.bin
-
-../sae/rtl/test_shrimple.bin: shrimple.bin
+../sae/rtl/test_%.bin: %.bin
 	cp $< $@
 
 %.bin: %.exe

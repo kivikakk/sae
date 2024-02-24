@@ -10,6 +10,9 @@ SECTIONS
     .rodata : {
         *(.rodata*)
     }
+    .sdata : {
+        *(.sdata*)
+    }
     /DISCARD/ : {
         *(*)
     }
