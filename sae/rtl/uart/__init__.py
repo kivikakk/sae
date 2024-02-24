@@ -1,15 +1,15 @@
 from amaranth import Module
 from amaranth.lib.fifo import SyncFIFO
 from amaranth.lib.io import Pin
-from amaranth.lib.wiring import Component, Out
+from amaranth.lib.wiring import Component, In
 from amaranth_stdio.serial import AsyncSerialTX
 
 __all__ = ["UART"]
 
 
 class UART(Component):
-    wr_data: Out(8)
-    wr_en: Out(1)
+    wr_data: In(8)
+    wr_en: In(1)
 
     _plat_uart: Pin
     _baud: int
@@ -19,12 +19,12 @@ class UART(Component):
         self._plat_uart = plat_uart
         self._baud = baud
         super().__init__()
-        self._fifo = SyncFIFO(width=8, depth=16)
+        self._fifo = SyncFIFO(width=8, depth=32)
 
     def elaborate(self, platform):
         m = Module()
 
-        freq = platform.default_clk_frequency
+        freq = getattr(platform, 'default_clk_frequency', 1e6)
 
         m.submodules.fifo = self._fifo
         m.d.comb += [

@@ -44,6 +44,7 @@ class Top(Elaboratable):
     XCOUNT = 32
 
     sysmem: Memory
+    uart: UART
     reg_inits: Optional[dict[str, int]]
     track_reg_written: bool
 
@@ -117,12 +118,15 @@ class Top(Elaboratable):
         match platform:
             case icebreaker():
                 plat_uart = platform.request("uart")
-                uart = m.submodules.uart = UART(plat_uart)
+                uart = self.uart =  m.submodules.uart = UART(plat_uart)
 
             case _:
-                uart = None
+                uart = self.uart = m.submodules.uart = UART(None)
 
-        self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem)
+        self.mmu = mmu = m.submodules.mmu = MMU(
+            sysmem=self.sysmem,
+            uart=uart,
+        )
 
         m.d.comb += self.state.eq(State.RUNNING)
 
@@ -175,17 +179,6 @@ class Top(Elaboratable):
                     # overridden, set x0 after so it remains zero (lol).
                     m.next = "fetch.init"
                     m.d.sync += self.pc.eq(self.pc + 4)
-
-                    if uart:
-                        last_x10 = Signal.like(self.xreg[0])
-                        m.d.sync += last_x10.eq(self.xreg[10])
-                        with m.If(self.xreg[10] != last_x10):
-                            m.d.sync += [
-                                uart.wr_data.eq(self.xreg[10]),
-                                uart.wr_en.eq(1),
-                            ]
-                        with m.Else():
-                            m.d.sync += uart.wr_en.eq(0)
 
                     with m.Switch(v_i.opcode):
                         with m.Case(Opcode.LOAD):

@@ -20,12 +20,14 @@ def run_until_fault(top):
         first = True
         insn = None
         written = set()
-        print()
+        uart = bytearray()
         while State.RUNNING == (yield top.state):
             if first:
                 first = False
             else:
                 yield Tick()
+            if (yield top.uart.wr_en):
+                uart.append((yield top.uart.wr_data))
             last_insn, insn = insn, (yield top.insn)
             if insn != last_insn:
                 print(f"pc={(yield top.pc):08x} [{insn:0>8x}]  mem=", end="")
@@ -48,6 +50,7 @@ def run_until_fault(top):
                 results[Reg[f"X{i}"]] = yield top.xreg[i]
         results["faultcode"] = yield top.fault_code
         results["faultinsn"] = yield top.fault_insn
+        results["uart"] = bytes(uart)
 
     sim = Simulator(top)
     sim.add_clock(1e6)

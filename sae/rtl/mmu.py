@@ -1,8 +1,12 @@
+from typing import Optional
+
 from amaranth import C, Cat, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory, ReadPort, WritePort
 from amaranth.lib.wiring import Component, In, Out, Signature, connect
 from amaranth.utils import ceil_log2
+
+from .uart import UART
 
 __all__ = ["MMU", "AccessWidth"]
 
@@ -44,11 +48,13 @@ class MMU(Component):
     mmu_read: "MMURead"
     mmu_write: "MMUWrite"
     sysmem: Memory
+    uart: Optional[UART]
 
-    def __init__(self, *, sysmem):
+    def __init__(self, *, sysmem, uart=None):
         super().__init__()
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
+        self.uart = uart
 
     def elaborate(self, platform):
         m = Module()
@@ -58,7 +64,7 @@ class MMU(Component):
         connect(m, self.read, mmu_read.read)
         connect(m, sysmem.read_port(), mmu_read.port)
 
-        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem)
+        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem, uart=self.uart)
         connect(m, self.write, mmu_write.write)
         connect(m, sysmem.write_port(granularity=8), mmu_write.port)
 
@@ -184,7 +190,11 @@ class MMURead(Component):
 
 
 class MMUWrite(Component):
-    def __init__(self, *, sysmem):
+    UART_OFFSET = 0x0001_0000
+
+    uart: Optional[UART]
+
+    def __init__(self, *, sysmem, uart=None):
         super().__init__(
             {
                 "write": Out(MMUWriteBusSignature(32, 32)),
@@ -197,11 +207,14 @@ class MMUWrite(Component):
                 ),
             }
         )
+        self.uart = uart
 
     def elaborate(self, platform):
         m = Module()
 
         m.d.sync += self.write.rdy.eq(1)
+        if self.uart:
+            m.d.sync += self.uart.wr_en.eq(0)
 
         with m.FSM():
             with m.State("init"):
@@ -215,6 +228,13 @@ class MMUWrite(Component):
                                 self.port.data.eq(self.write.data[:8].replicate(2)),
                                 self.port.en.eq(Mux(self.write.addr[0], 0b10, 0b01)),
                             ]
+                            if self.uart:
+                                with m.If(self.write.addr == self.UART_OFFSET):
+                                    m.d.sync += [
+                                        self.uart.wr_data.eq(self.write.data[:8]),
+                                        self.uart.wr_en.eq(1),
+                                        self.port.en.eq(0),
+                                    ]
 
                         with m.Case(AccessWidth.HALF):
                             m.d.sync += self.port.addr.eq(self.write.addr >> 1)
