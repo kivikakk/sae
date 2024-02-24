@@ -14,13 +14,14 @@ __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
 
 @singledispatch
-def run_until_fault(top):
+def run_until_fault(top, *, max_cycles):
     results = {}
 
     def bench():
         nonlocal results
         first = True
         insn = None
+        cycles = -1
         written = set()
         uart = bytearray()
         while State.RUNNING == (yield top.state):
@@ -32,6 +33,9 @@ def run_until_fault(top):
                 uart.append((yield top.uart.wr_data))
             last_insn, insn = insn, (yield top.insn)
             if insn != last_insn:
+                if cycles == max_cycles:
+                    raise RuntimeError("max cycles reached")
+                cycles += 1
                 print(f"pc={(yield top.pc):08x} [{insn:0>8x}]", end="")
                 for i in range(1, 32):
                     v = yield top.xreg[i]
@@ -99,7 +103,7 @@ class InsnTestHelpers:
             reg_inits=regs,
             track_reg_written=True,
         )
-        self.results = run_until_fault(top)
+        self.results = run_until_fault(top, max_cycles=1000)
         self.body = None
         self.__asserted = set(
             ["pc", "faultcode", "faultinsn"]
@@ -123,8 +127,15 @@ class InsnTestHelpers:
                 expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
             )
             return
-        if expected < 0:
-            expected += 2**32  # XLEN
-        self.assertEqual(
-            expected, actual, f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}"
-        )
+        if isinstance(expected, int):
+            if expected < 0:
+                expected += 2**32  # XLEN
+            self.assertEqual(
+                expected,
+                actual,
+                f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}",
+            )
+        else:
+            self.assertEqual(
+                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
+            )

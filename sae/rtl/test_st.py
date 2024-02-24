@@ -61,17 +61,25 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
     def translate_arg_list(cls, args, names):
         return [cls.translate_arg(arg, name) for arg, name in zip(args, names)]
 
+    def _init_st(self, *, body=None, reg_inits=None):
+        if hasattr(self, "_rest_unwritten"):
+            self._fish_st()
+        self._reg_inits = reg_inits or {}
+        self.body = body or []
+        self.results = None
+        self._rest_unwritten = True
+
     def run_st(self, body):
         for line in body:
             with annotate_exceptions(self.filename, line):
                 match line:
                     case st.Pragma(kind="init", args=args):
-                        self.__fish()
-                        self.__reg_inits = {
-                            assign.register.register: assign.assign for assign in args
-                        }
-                        self.body = []
-                        self.results = None
+                        self._init_st(
+                            reg_inits={
+                                assign.register.register: assign.assign
+                                for assign in args
+                            }
+                        )
                     case st.Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
                         args = self.translate_arg(
@@ -81,37 +89,55 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         if not isinstance(ops, list):
                             ops = [ops]
                         self.body.extend(ops)
-                    case st.Pragma(kind="assert", args=args):
+                    case st.Pragma(kind="assert", args=args) | st.Pragma(
+                        kind="assert~", args=args
+                    ):
+                        self._rest_unwritten = not line.kind.endswith("~")
                         asserts = {
-                            assign.register.register: assign.assign for assign in args
+                            (
+                                assign.register
+                                if isinstance(assign.register, str)
+                                else Reg(assign.register.register.upper())
+                            ): assign.assign
+                            for assign in args
                         }
                         if self.results is None:
-                            self.run_body(self.__reg_inits)
+                            self.run_body(self._reg_inits)
+                            faultcode = asserts.pop(
+                                "faultcode", FaultCode.ILLEGAL_INSTRUCTION
+                            )
                             self.assertReg(
                                 "faultcode",
+                                faultcode,
+                            )
+                            self.assertReg(
+                                "faultinsn",
                                 int(
                                     asserts.pop(
-                                        "faultcode", str(FaultCode.ILLEGAL_INSTRUCTION)
+                                        "faultinsn",
+                                        "0xFFFFFFFF"
+                                        if faultcode == FaultCode.ILLEGAL_INSTRUCTION
+                                        else "0",
                                     ),
                                     0,
                                 ),
                             )
-                            self.assertReg(
-                                "faultinsn",
-                                int(asserts.pop("faultinsn", "0xFFFFFFFF"), 0),
-                            )
                         for reg, assign in asserts.items():
-                            self.assertReg(Reg(reg.upper()), assign)
+                            self.assertReg(reg, assign)
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)
+                    case st.Pragma(kind="rtf", args=[f]):
+                        self._init_st(
+                            body=Top.sysmem_init_for(Path(__file__).parent / f.decode())
+                        )
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")
-        self.__fish()
+        self._fish_st()
 
-    def __fish(self):
-        if self.results is not None:
+    def _fish_st(self):
+        if self._rest_unwritten and self.results is not None:
             self.assertRegRest(Unwritten)
 
 

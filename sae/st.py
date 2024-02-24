@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass
 from functools import singledispatchmethod
 from typing import Optional
@@ -13,11 +14,12 @@ tokenize = make_tokenizer(
         TokenSpec("whitespace", r"\s+"),
         TokenSpec("comment", r";.*$"),
         TokenSpec("label", r"\w+:"),
-        TokenSpec("pragma", r"\.\w+"),
+        TokenSpec("pragma", r"\.\w+(~?)"),
         TokenSpec("offset", r"\d+\((x[0-9]|x[12][0-9]|x3[01])\)"),
         TokenSpec("register", "pc|x[0-9]|x[12][0-9]|x3[01]|a[0-7]"),
         TokenSpec("word", r"[a-zA-Z][a-zA-Z0-9_.]*"),
         TokenSpec("number", r"(-\s*)?(0[xX][0-9a-fA-F_]+|0[bB][01_]+|[0-9_]+)"),
+        TokenSpec("string", r"\"([^\"\\]*(\\.)?)*\""),  # untested
         TokenSpec("comma", r","),
         TokenSpec("equals", r"="),
     ]
@@ -72,17 +74,28 @@ def parse_offset(p):
     return Offset(imm, Register(reg))
 
 
+escape_re = re.compile(r"\\.")
+string_escapes = [chr(i) for i in range(256)]
+string_escapes[ord("r")] = "\r"
+string_escapes[ord("n")] = "\n"
+
+
+def parse_string(s):
+    return escape_re.sub(lambda m: string_escapes[ord(m[0][1])], s[1:-1]).encode()
+
+
 def parse(tokens, *, line, lineno):
     number = tok("number") >> (lambda n: int(n, 0))
     offset = tok("offset") >> parse_offset
+    string = tok("string") >> parse_string
 
     register = tok("register") >> Register
-    assign = -tok("equals") + number
-    register_or_assign = register + maybe(assign) >> (
+    assign = -tok("equals") + (number | string)
+    register_or_assign = (register | tok("word")) + maybe(assign) >> (
         lambda p: p[0] if p[1] is None else Assign(*p)
     )
 
-    arg = number | offset | register_or_assign | tok("word")
+    arg = number | offset | register_or_assign | string | tok("word")
     arglist = maybe(arg + many(-tok("comma") + arg)) >> (
         lambda p: [] if not p else [p[0]] + p[1]
     )

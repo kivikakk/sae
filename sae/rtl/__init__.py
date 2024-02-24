@@ -80,12 +80,15 @@ class Top(Elaboratable):
         self.wb_reg = Signal(range(self.XCOUNT))
         self.wb_val = Signal(self.XLEN)
 
-    @staticmethod
-    def sysmem_for(path, *, memory):
-        inp = path.read_bytes()
+    @classmethod
+    def sysmem_for(cls, path, *, memory):
+        init = cls.sysmem_init_for(path)
+        return Memory(depth=memory // 2, shape=16, init=init)
 
+    @staticmethod
+    def sysmem_init_for(path):
         init = []
-        it = iter(inp)
+        it = iter(path.read_bytes())
         while batch := tuple(islice(it, 2)):
             match batch:
                 case [a, b]:
@@ -94,8 +97,8 @@ class Top(Elaboratable):
                     init.append(e)
                 case _:
                     raise RuntimeError("!?")
+        return init
 
-        return Memory(depth=memory // 2, shape=16, init=init)
 
     def reg_reset(self, xn):
         if xn == 0:
