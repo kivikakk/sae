@@ -1,11 +1,12 @@
 #include <stdint.h>
 
-int main() {
+void print(const char* m) {
   volatile uint8_t *UART_TX = (uint8_t *)0x10000;
-  *UART_TX = 'H';
-  *UART_TX = 'i';
-  *UART_TX = '!';
-  *UART_TX = '\r';
-  *UART_TX = '\n';
-  return 123;
+  while (*m)
+    *UART_TX = (uint8_t)*m++;
+}
+
+int main() {
+  print("i am ur princess\r\n");
+  return 69;
 }

@@ -50,7 +50,8 @@ def run_until_fault(top):
                 results[Reg[f"X{i}"]] = yield top.xreg[i]
         results["faultcode"] = yield top.fault_code
         results["faultinsn"] = yield top.fault_insn
-        results["uart"] = bytes(uart)
+        if uart:
+            results["uart"] = bytes(uart)
 
     sim = Simulator(top)
     sim.add_clock(1e6)

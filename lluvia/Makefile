@@ -1,4 +1,6 @@
-CFLAGS = -march=rv32i -mabi=ilp32
+ASFLAGS = -march=rv32i -mabi=ilp32
+CFLAGS  = -march=rv32i -mabi=ilp32 -O2
+LDFLAGS = -T linker.ld
 
 TARGETS = shrimple.bin
 
@@ -7,11 +9,14 @@ all: ../sae/rtl/test_shrimple.bin
 ../sae/rtl/test_shrimple.bin: shrimple.bin
 	cp $< $@
 
-%.bin: %.o
-	riscv32-none-elf-objcopy -O binary $< $@
+%.bin: %.exe
+	$(OBJCOPY) -O binary $< $@
 
-.PRECIOUS: %.o
+%.exe: %.o crt0.o
+	$(LD) $(LDFLAGS) -o $@ $<
+
+.PRECIOUS: %.o %.bin %.exe
 
 .PHONY: clean
 clean:
-	-rm *.bin *.o
+	-rm *.bin *.exe *.o
