@@ -41,16 +41,17 @@ class UART(Component):
         ]
 
         with m.FSM():
-            with m.State("IDLE"):
+            with m.State("idle"):
                 with m.If(astx.rdy & self._fifo.r_rdy):
                     m.d.sync += [
                         astx.data.eq(self._fifo.r_data),
                         astx.ack.eq(1),
                         self._fifo.r_en.eq(1),
                     ]
-                    m.next = "START"
+                    m.next = "wait"
 
-            with m.State("START"):
-                m.next = "IDLE"
+            with m.State("wait"):
+                # actually need this lol
+                m.next = "idle"
 
         return m

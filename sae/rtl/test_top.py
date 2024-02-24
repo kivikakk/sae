@@ -19,4 +19,4 @@ class TestTop(unittest.TestCase):
         )
         self.assertEqual(FaultCode.PC_MISALIGNED, FaultCode(results["faultcode"]))
         self.assertEqual(123, results[Reg("A0")])
-        self.assertEqual(b"Hi!\n", results["uart"])
+        self.assertEqual(b"Hi!\r\n", results["uart"])

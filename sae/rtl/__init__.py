@@ -2,8 +2,8 @@ from itertools import islice
 from pathlib import Path
 from typing import Optional
 
-from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal,
-                      signed)
+from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, ResetInserter,
+                      Shape, Signal, signed)
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 
@@ -61,7 +61,7 @@ class Top(Elaboratable):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent / "test_shrimple.bin", memory=8192
         )
-        self.reg_inits = reg_inits or {}
+        self.reg_inits = reg_inits or {"x1": 0xFFFF_FFFF}  # ensure RET faults
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
@@ -118,7 +118,7 @@ class Top(Elaboratable):
         match platform:
             case icebreaker():
                 plat_uart = platform.request("uart")
-                uart = self.uart =  m.submodules.uart = UART(plat_uart)
+                uart = self.uart = m.submodules.uart = UART(plat_uart)
 
             case _:
                 uart = self.uart = m.submodules.uart = UART(None)
@@ -469,3 +469,26 @@ class Top(Elaboratable):
         if insn is not None:
             assigns.append(self.fault_insn.eq(insn))
         return assigns
+
+
+class DeployedTop(Elaboratable):
+    def __init__(self, *args, **kwargs):
+        self.top = Top(*args, **kwargs)
+
+    def elaborate(self, platform):
+        from .. import icebreaker
+
+        m = Module()
+
+        rst = Signal()
+        m.d.sync += rst.eq(0)
+
+        match platform:
+            case icebreaker():
+                plat_button = platform.request("button")
+                with m.If(plat_button.i):
+                    m.d.sync += rst.eq(1)
+
+        m.submodules.top = ResetInserter(rst)(self.top)
+
+        return m
