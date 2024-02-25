@@ -12,8 +12,7 @@ class TestTop(unittest.TestCase):
 
     def test_lluvia(self):
         results = run_until_fault(
-            Path(__file__).parent / "test_shrimple.bin",
-            reg_inits={"x1": 0xFFFF_FFFF},
+            Path(__file__).parent / "test_shrimple.bin"
         )
         self.assertEqual(FaultCode.PC_MISALIGNED, FaultCode(results["faultcode"]))
         self.assertEqual(69, results[Reg("A0")])

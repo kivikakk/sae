@@ -11,7 +11,7 @@ from . import rv32
 from .mmu import MMU, AccessWidth
 from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
                    OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
-                   OpStoreFunct, OpSystemFunct)
+                   OpStoreFunct, OpSystemFunct, Reg)
 from .uart import UART
 
 __all__ = [
@@ -61,7 +61,9 @@ class Top(Elaboratable):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent / "test_shrimple.bin", memory=8192
         )
-        self.reg_inits = reg_inits or {"x1": 0xFFFF_FFFF}  # ensure RET faults
+        self.reg_inits = reg_inits or {}
+        if Reg.X1 not in self.reg_inits:
+            self.reg_inits[Reg.X1] = 0xFFFF_FFFF  # ensure RET faults
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
@@ -102,7 +104,7 @@ class Top(Elaboratable):
     def reg_reset(self, xn):
         if xn == 0:
             return 0
-        if init := self.reg_inits.get(f"x{xn}"):
+        if init := self.reg_inits.get(Reg[f"X{xn}"]):
             v = init
         elif xn == 2:  # SP
             v = (Shape.cast(self.sysmem.shape).width // 8) * self.sysmem.depth
