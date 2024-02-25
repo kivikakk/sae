@@ -43,21 +43,20 @@ class UART(Component):
         )
 
         # tx
-        m.d.sync += serial.tx.ack.eq(0)
-        m.d.sync += self._fifo.r_en.eq(0)
-        with m.FSM():
+        with m.FSM() as fsm:
             with m.State("idle"):
                 with m.If(serial.tx.rdy & self._fifo.r_rdy):
-                    m.d.sync += [
-                        serial.tx.data.eq(self._fifo.r_data),
-                        serial.tx.ack.eq(1),
-                        self._fifo.r_en.eq(1),
-                    ]
+                    m.d.sync += serial.tx.data.eq(self._fifo.r_data)
                     m.next = "wait"
 
             with m.State("wait"):
                 # actually need this lol
                 m.next = "idle"
+
+            m.d.comb += [
+                serial.tx.ack.eq(fsm.ongoing("wait")),
+                self._fifo.r_en.eq(fsm.ongoing("wait")),
+            ]
 
         # rx
         with m.FSM() as fsm:
@@ -74,7 +73,7 @@ class UART(Component):
                     m.next = "idle"
 
             m.d.comb += [
-                serial.rx.ack.eq(fsm.ongoing("read")),
+                serial.rx.ack.eq(fsm.ongoing("idle")),
                 self.rd_rdy.eq(fsm.ongoing("consume")),
             ]
 
