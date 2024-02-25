@@ -114,9 +114,6 @@ class MMURead(Component):
         m.d.comb += self.read.rdy.eq(0)
         m.d.comb += self.read.valid.eq(valid & ~self.read.ack)
 
-        r_addr0 = Signal(1)
-        r_width = Signal(AccessWidth)
-
         with m.FSM():
             with m.State("init"):
                 m.d.comb += self.read.rdy.eq(1)
@@ -125,8 +122,6 @@ class MMURead(Component):
                     m.d.sync += [
                         valid.eq(0),
                         self.port.addr.eq(self.read.addr >> 1),
-                        r_addr0.eq(self.read.addr[0]),
-                        r_width.eq(self.read.width),
                     ]
 
                     m.next = "pipe"
@@ -135,8 +130,8 @@ class MMURead(Component):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
 
                 with m.If(
-                    (r_width == AccessWidth.WORD)
-                    | ((r_width == AccessWidth.HALF) & r_addr0)
+                    (self.read.width == AccessWidth.WORD)
+                    | ((self.read.width == AccessWidth.HALF) & self.read.addr[0])
                 ):
                     m.next = "coll0"
                 with m.Else():
@@ -147,9 +142,9 @@ class MMURead(Component):
                 m.d.sync += [
                     self.read.value.eq(
                         Mux(
-                            r_width == AccessWidth.HALF,
+                            self.read.width == AccessWidth.HALF,
                             self.port.data,
-                            self.port.data.word_select(r_addr0, 8),
+                            self.port.data.word_select(self.read.addr[0], 8),
                         )
                     ),
                     valid.eq(1),
@@ -165,7 +160,7 @@ class MMURead(Component):
                 m.next = "coll1"
 
             with m.State("coll1"):
-                with m.If(r_width == AccessWidth.HALF):
+                with m.If(self.read.width == AccessWidth.HALF):
                     # unaligned half
                     m.d.sync += [
                         self.read.value.eq(
@@ -174,7 +169,7 @@ class MMURead(Component):
                         valid.eq(1),
                     ]
                     m.next = "init"
-                with m.Elif(~r_addr0):
+                with m.Elif(~self.read.addr[0]):
                     # aligned word
                     m.d.sync += [
                         self.read.value.eq(self.read.value | (self.port.data << 16)),
