@@ -23,6 +23,8 @@ class MMUReadBusSignature(Signature):
             {
                 "addr": In(addr_width),
                 "width": In(AccessWidth),
+                "ack": In(1),
+                "rdy": Out(1),
                 "value": Out(data_width),
                 "valid": Out(1),
             }
@@ -87,17 +89,10 @@ class MMURead(Component):
                 ),
             }
         )
+        self.uart = uart
 
     def elaborate(self, platform):
         m = Module()
-
-        r_addr = Signal(32, init=-1)
-        r_width = Signal(AccessWidth)
-
-        underlying_valid = Signal()
-        m.d.comb += self.read.valid.eq(
-            (r_addr == self.read.addr) & (r_width == self.read.width) & underlying_valid
-        )
 
         #  0 . 1 | 2 . 3 | 4 . 5 | 6    acc#
         # ^^^^^^^|^^^^^^^|^^^^^^^|^^^^^^^^^^
@@ -115,15 +110,25 @@ class MMURead(Component):
         #   * half accesses take 1+a[0] reads, and
         #   * byte accesses take 1 read.
 
+        valid = Signal()
+        m.d.comb += self.read.rdy.eq(0)
+        m.d.comb += self.read.valid.eq(valid & ~self.read.ack)
+
+        r_addr0 = Signal(1)
+        r_width = Signal(AccessWidth)
+
         with m.FSM():
             with m.State("init"):
-                with m.If((self.read.addr != r_addr) | (self.read.width != r_width)):
+                m.d.comb += self.read.rdy.eq(1)
+
+                with m.If(self.read.ack):
                     m.d.sync += [
-                        r_addr.eq(self.read.addr),
-                        r_width.eq(self.read.width),
-                        underlying_valid.eq(0),
+                        valid.eq(0),
                         self.port.addr.eq(self.read.addr >> 1),
+                        r_addr0.eq(self.read.addr[0]),
+                        r_width.eq(self.read.width),
                     ]
+
                     m.next = "pipe"
 
             with m.State("pipe"):
@@ -131,7 +136,7 @@ class MMURead(Component):
 
                 with m.If(
                     (r_width == AccessWidth.WORD)
-                    | ((r_width == AccessWidth.HALF) & r_addr[0])
+                    | ((r_width == AccessWidth.HALF) & r_addr0)
                 ):
                     m.next = "coll0"
                 with m.Else():
@@ -144,10 +149,10 @@ class MMURead(Component):
                         Mux(
                             r_width == AccessWidth.HALF,
                             self.port.data,
-                            self.port.data.word_select(r_addr[0], 8),
+                            self.port.data.word_select(r_addr0, 8),
                         )
                     ),
-                    underlying_valid.eq(1),
+                    valid.eq(1),
                 ]
                 m.next = "init"
 
@@ -166,14 +171,14 @@ class MMURead(Component):
                         self.read.value.eq(
                             self.read.value[8:] | (self.port.data[:8] << 8)
                         ),
-                        underlying_valid.eq(1),
+                        valid.eq(1),
                     ]
                     m.next = "init"
-                with m.Elif(~r_addr[0]):
+                with m.Elif(~r_addr0):
                     # aligned word
                     m.d.sync += [
                         self.read.value.eq(self.read.value | (self.port.data << 16)),
-                        underlying_valid.eq(1),
+                        valid.eq(1),
                     ]
                     m.next = "init"
                 with m.Else():
@@ -186,7 +191,7 @@ class MMURead(Component):
             with m.State("coll2"):
                 m.d.sync += [
                     self.read.value.eq(self.read.value | (self.port.data[:8] << 24)),
-                    underlying_valid.eq(1),
+                    valid.eq(1),
                 ]
                 m.next = "init"
 

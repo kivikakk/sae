@@ -8,6 +8,7 @@ from rainhdx import Platform
 
 from .mmu import MMU, AccessWidth
 
+SYSMEM_TO_SHOW = 8
 
 def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
@@ -19,7 +20,7 @@ def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
         )
         if sysmem:
             print("data=", end="")
-            for i in range(min(4, sysmem.depth)):
+            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
                 print(f"{(yield sysmem[i]):0>4x} ", end="")
         print()
     if mw:
@@ -31,7 +32,7 @@ def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
         )
         if sysmem and not mr:
             print("data=", end="")
-            for i in range(min(4, sysmem.depth)):
+            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
                 print(f"{(yield sysmem[i]):0>4x} ", end="")
         print()
 
@@ -60,15 +61,19 @@ class TestBase:
             )
 
     def assertRead(self, addr, width, value, mem):
-        ticks = 3
+        ticks = 2
         if addr & 1 and width != AccessWidth.BYTE:
             ticks += 1
         if width == AccessWidth.WORD:
             ticks += 1
 
         def bench(*, top, _mr, _mw):
+            assert((yield top.read.rdy))
             yield top.read.addr.eq(addr)
             yield top.read.width.eq(width)
+            yield top.read.ack.eq(1)
+            yield Tick()
+            yield top.read.ack.eq(0)
             yield from self.waitFor(
                 top.read.valid, change_to=1, ticks=ticks, mr=_mr, sysmem=top.sysmem
             )
@@ -144,19 +149,3 @@ class TestMMU(unittest.TestCase, TestBase):
         self.assertWrite(mem, 1, AccessWidth.WORD, 0x12345678, [0x7812, 0x3456])
         self.assertWrite(mem, 2, AccessWidth.WORD, 0x12345678, [0x1234, 0x5678])
         self.assertWrite(mem, 3, AccessWidth.WORD, 0x12345678, [0x3456, 0x7812])
-
-    def test_rejig(self):
-        def bench(*, top, _mr, _mw):
-            yield Tick()  # I'm kinda annoyed I need this?  But it doesn't repro otherwise ...
-            self.assertEqual(AccessWidth.BYTE, (yield top.read.width))
-            yield top.read.width.eq(AccessWidth.WORD)
-            yield from self.waitFor(
-                top.read.valid, change_to=1, ticks=6, mr=_mr, sysmem=top.sysmem
-            )
-            self.assertEqual(
-                0xABCD1234,
-                (yield top.read.value),
-                f"wanted 0xABCD1234, got {(yield top.read.value):x}",
-            )
-
-        self.simTestbench(bench, [0x1234, 0xABCD, 0x5678, 0xEF01])

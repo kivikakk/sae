@@ -26,7 +26,7 @@ def run_until_fault(top, *, max_cycles=1000):
 
         nonlocal results
         first = True
-        insn = None
+        insn, pc = 0, 0
         cycles = -1
         written = set()
         uart = bytearray()
@@ -46,11 +46,12 @@ def run_until_fault(top, *, max_cycles=1000):
                     yield top.uart.rd_rdy.eq(0)
 
             last_insn, insn = insn, (yield top.insn)
+            last_pc, pc = pc, (yield top.pc)
             if insn != last_insn:
                 if cycles == max_cycles:
                     raise RuntimeError("max cycles reached")
                 cycles += 1
-                print(f"pc={(yield top.pc):08x} [{insn:0>8x}]", end="")
+                print(f"pc={pc:08x} [{insn:0>8x}]", end="")
                 for i in range(1, 32):
                     v = yield top.xreg[i]
                     if i in written or v:

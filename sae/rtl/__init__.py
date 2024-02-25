@@ -131,6 +131,7 @@ class Top(Elaboratable):
             sysmem=self.sysmem,
             uart=uart,
         )
+        m.d.sync += mmu.read.ack.eq(0)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
@@ -152,6 +153,7 @@ class Top(Elaboratable):
                     m.d.sync += [
                         mmu.read.addr.eq(self.pc),
                         mmu.read.width.eq(AccessWidth.WORD),
+                        mmu.read.ack.eq(1),
                     ]
                     m.next = "fetch.wait"
 
@@ -190,6 +192,7 @@ class Top(Elaboratable):
                             m.d.sync += [
                                 mmu.read.addr.eq(addr),
                                 mmu.read.width.eq(v_i.funct3[:2]),
+                                mmu.read.ack.eq(1),
                                 self.wb_reg.eq(v_i.rd),
                             ]
                             with m.Switch(v_i.funct3):
