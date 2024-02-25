@@ -3,5 +3,5 @@ test_shrimple:
     .assert~ faultcode=2, a0=69, uart="i am ur princess\r\n"
 
 test_shrimprw:
-    .rtf "test_shrimprw.bin"
+    .rtf "test_shrimprw.bin", uart="y"
     .assert~ faultcode=2, a0=420

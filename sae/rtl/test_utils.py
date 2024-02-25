@@ -18,6 +18,12 @@ def run_until_fault(top, *, max_cycles=1000):
     results = {}
 
     def bench():
+        uart_buffer = (top.reg_inits or {}).get("uart")
+        if uart_buffer:
+            yield top.uart.rd_rdy.eq(1)
+            yield top.uart.rd_data.eq(uart_buffer[0])
+            uart_buffer = uart_buffer[1:]
+
         nonlocal results
         first = True
         insn = None
@@ -31,6 +37,14 @@ def run_until_fault(top, *, max_cycles=1000):
                 yield Tick()
             if (yield top.uart.wr_en):
                 uart.append((yield top.uart.wr_data))
+            if (yield top.uart.rd_en):
+                if uart_buffer:
+                    yield top.uart.rd_data.eq(uart_buffer[0])
+                    uart_buffer = uart_buffer[1:]
+                else:
+                    yield top.uart.rd_data.eq(0)
+                    yield top.uart.rd_rdy.eq(0)
+
             last_insn, insn = insn, (yield top.insn)
             if insn != last_insn:
                 if cycles == max_cycles:

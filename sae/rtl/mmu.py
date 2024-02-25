@@ -43,6 +43,8 @@ class MMUWriteBusSignature(Signature):
 
 
 class MMU(Component):
+    UART_OFFSET = 0x0001_0000
+
     read: In(MMUReadBusSignature(32, 32))
     write: In(MMUWriteBusSignature(32, 32))
     mmu_read: "MMURead"
@@ -60,7 +62,7 @@ class MMU(Component):
         m = Module()
 
         m.submodules.sysmem = sysmem = self.sysmem
-        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem)
+        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem, uart=self.uart)
         connect(m, self.read, mmu_read.read)
         connect(m, sysmem.read_port(), mmu_read.port)
 
@@ -72,7 +74,9 @@ class MMU(Component):
 
 
 class MMURead(Component):
-    def __init__(self, *, sysmem):
+    uart: Optional[UART]
+
+    def __init__(self, *, sysmem, uart=None):
         super().__init__(
             {
                 "read": Out(MMUReadBusSignature(32, 32)),
@@ -190,8 +194,6 @@ class MMURead(Component):
 
 
 class MMUWrite(Component):
-    UART_OFFSET = 0x0001_0000
-
     uart: Optional[UART]
 
     def __init__(self, *, sysmem, uart=None):
@@ -229,7 +231,7 @@ class MMUWrite(Component):
                                 self.port.en.eq(Mux(self.write.addr[0], 0b10, 0b01)),
                             ]
                             if self.uart:
-                                with m.If(self.write.addr == self.UART_OFFSET):
+                                with m.If(self.write.addr == MMU.UART_OFFSET):
                                     m.d.sync += [
                                         self.uart.wr_data.eq(self.write.data[:8]),
                                         self.uart.wr_en.eq(1),

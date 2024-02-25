@@ -69,17 +69,23 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
         self.results = None
         self._rest_unwritten = True
 
+    @staticmethod
+    def _parse_pairs(args):
+        return {
+            (
+                assign.register
+                if isinstance(assign.register, str)
+                else Reg(assign.register.register.upper())
+            ): assign.assign
+            for assign in args
+        }
+
     def run_st(self, body):
         for line in body:
             with annotate_exceptions(self.filename, line):
                 match line:
                     case st.Pragma(kind="init", args=args):
-                        self._init_st(
-                            reg_inits={
-                                assign.register.register: assign.assign
-                                for assign in args
-                            }
-                        )
+                        self._init_st(reg_inits=self._parse_pairs(args))
                     case st.Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
                         args = self.translate_arg(
@@ -93,14 +99,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         kind="assert~", args=args
                     ):
                         self._rest_unwritten = not line.kind.endswith("~")
-                        asserts = {
-                            (
-                                assign.register
-                                if isinstance(assign.register, str)
-                                else Reg(assign.register.register.upper())
-                            ): assign.assign
-                            for assign in args
-                        }
+                        asserts = self._parse_pairs(args)
                         if self.results is None:
                             self.run_body(self._reg_inits)
                             faultcode = asserts.pop(
@@ -127,9 +126,12 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                     case st.Pragma(kind="word", args=[w]):
                         self.body.append(w & 0xFFFF)
                         self.body.append((w >> 16) & 0xFFFF)
-                    case st.Pragma(kind="rtf", args=[f]):
+                    case st.Pragma(kind="rtf", args=[f, *pairs]):
                         self._init_st(
-                            body=Top.sysmem_init_for(Path(__file__).parent / f.decode())
+                            body=Top.sysmem_init_for(
+                                Path(__file__).parent / f.decode()
+                            ),
+                            reg_inits=self._parse_pairs(pairs),
                         )
                     case _:
                         print("idk how to handle", line)

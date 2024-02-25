@@ -1,7 +1,7 @@
 from amaranth import Module
 from amaranth.lib.fifo import SyncFIFO
 from amaranth.lib.io import Pin
-from amaranth.lib.wiring import Component, In
+from amaranth.lib.wiring import Component, In, Out
 from amaranth_stdio.serial import AsyncSerialTX
 
 __all__ = ["UART"]
@@ -10,6 +10,10 @@ __all__ = ["UART"]
 class UART(Component):
     wr_data: In(8)
     wr_en: In(1)
+
+    rd_rdy: Out(1)
+    rd_en: In(1)
+    rd_data: Out(8)
 
     _plat_uart: Pin
     _baud: int
