@@ -36,12 +36,18 @@ def run_until_fault(top, *, max_cycles=1000):
             else:
                 yield Tick()
             if (yield top.uart.wr_en):
-                uart.append((yield top.uart.wr_data))
+                datum = yield top.uart.wr_data
+                print(f"core wrote to UART: 0x{datum:0>2x} '{datum:c}'")
+                uart.append(datum)
             if (yield top.uart.rd_en):
                 if uart_buffer:
+                    print(
+                        f"core read from UART: 0x{uart_buffer[0]:0>2x} '{uart_buffer[0]:c}'"
+                    )
                     yield top.uart.rd_data.eq(uart_buffer[0])
                     uart_buffer = uart_buffer[1:]
                 else:
+                    print("core read from empty UART")
                     yield top.uart.rd_data.eq(0)
                     yield top.uart.rd_rdy.eq(0)
 

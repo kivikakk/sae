@@ -20,10 +20,10 @@ int main() {
     char c = inkey();
     if (c == 'y' || c == 'Y' || c == '\n' || c == '\r') {
       print("y\r\nohhhhhh!\r\n");
-      return 69;
+      return 420;
     } else if (c == 'n' || c == 'N') {
       print("n\r\n:<\r\n");
-      return 420;
+      return 696969;
     }
   }
 }

@@ -64,11 +64,15 @@ class MMU(Component):
         m = Module()
 
         m.submodules.sysmem = sysmem = self.sysmem
-        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem, uart=self.uart)
+        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(
+            sysmem=sysmem, uart=self.uart
+        )
         connect(m, self.read, mmu_read.read)
         connect(m, sysmem.read_port(), mmu_read.port)
 
-        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem, uart=self.uart)
+        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(
+            sysmem=sysmem, uart=self.uart
+        )
         connect(m, self.write, mmu_write.write)
         connect(m, sysmem.write_port(granularity=8), mmu_write.port)
 
@@ -119,12 +123,36 @@ class MMURead(Component):
                 m.d.comb += self.read.rdy.eq(1)
 
                 with m.If(self.read.ack):
-                    m.d.sync += [
-                        valid.eq(0),
-                        self.port.addr.eq(self.read.addr >> 1),
-                    ]
+                    with m.If(
+                        (self.read.width == AccessWidth.BYTE)
+                        & (self.read.addr == MMU.UART_OFFSET)
+                    ):
+                        with m.If(self.uart.rd_rdy):
+                            m.d.sync += [
+                                self.uart.rd_en.eq(1),
+                                self.read.value.eq(self.uart.rd_data),
+                                valid.eq(1),
+                            ]
+                            m.next = "uart.dessert"
+                        with m.Else():
+                            m.d.sync += [
+                                self.read.value.eq(0),
+                                valid.eq(
+                                    1
+                                ),  # ideally we actually identify there's nothing to read!
+                            ]
+                            m.next = "uart.dessert"  # XXX probably unnecessary
+                    with m.Else():
+                        m.d.sync += [
+                            valid.eq(0),
+                            self.port.addr.eq(self.read.addr >> 1),
+                        ]
+                        m.next = "pipe"
 
-                    m.next = "pipe"
+            with m.State("uart.dessert"):
+                # may not need this state at all.
+                m.d.sync += self.uart.rd_en.eq(0)
+                m.next = "init"
 
             with m.State("pipe"):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
