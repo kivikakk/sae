@@ -2,7 +2,7 @@ from amaranth import Module
 from amaranth.lib.fifo import SyncFIFO
 from amaranth.lib.io import Pin
 from amaranth.lib.wiring import Component, In, Out
-from amaranth_stdio.serial import AsyncSerialTX
+from amaranth_stdio.serial import AsyncSerial
 
 __all__ = ["UART"]
 
@@ -23,33 +23,34 @@ class UART(Component):
         self._plat_uart = plat_uart
         self._baud = baud
         super().__init__()
-        self._fifo = SyncFIFO(width=8, depth=32)
 
     def elaborate(self, platform):
         m = Module()
 
+        if platform.simulation:
+            return m
+
         freq = getattr(platform, "default_clk_frequency", 1e6)
 
-        m.submodules.fifo = self._fifo
+        m.submodules.fifo = self._fifo = SyncFIFO(width=8, depth=32)
         m.d.comb += [
             self._fifo.w_data.eq(self.wr_data),
             self._fifo.w_en.eq(self.wr_en),
         ]
 
-        m.submodules.astx = astx = AsyncSerialTX(
+        m.submodules.serial = serial = AsyncSerial(
             divisor=int(freq // self._baud), pins=self._plat_uart
         )
-        m.d.sync += [
-            astx.ack.eq(0),
-            self._fifo.r_en.eq(0),
-        ]
 
+        # tx
+        m.d.sync += serial.tx.ack.eq(0)
+        m.d.sync += self._fifo.r_en.eq(0)
         with m.FSM():
             with m.State("idle"):
-                with m.If(astx.rdy & self._fifo.r_rdy):
+                with m.If(serial.tx.rdy & self._fifo.r_rdy):
                     m.d.sync += [
-                        astx.data.eq(self._fifo.r_data),
-                        astx.ack.eq(1),
+                        serial.tx.data.eq(self._fifo.r_data),
+                        serial.tx.ack.eq(1),
                         self._fifo.r_en.eq(1),
                     ]
                     m.next = "wait"
@@ -57,5 +58,24 @@ class UART(Component):
             with m.State("wait"):
                 # actually need this lol
                 m.next = "idle"
+
+        # rx
+        with m.FSM() as fsm:
+            with m.State("idle"):
+                with m.If(serial.rx.rdy):
+                    m.next = "read"
+
+            with m.State("read"):
+                m.d.sync += self.rd_data.eq(serial.rx.data)
+                m.next = "consume"
+
+            with m.State("consume"):
+                with m.If(self.rd_en):
+                    m.next = "idle"
+
+            m.d.comb += [
+                serial.rx.ack.eq(fsm.ongoing("read")),
+                self.rd_rdy.eq(fsm.ongoing("consume")),
+            ]
 
         return m

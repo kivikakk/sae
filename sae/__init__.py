@@ -18,6 +18,8 @@ class icebreaker(ICEBreakerPlatform, rainhdx.Platform):
 
 class plats:
     class test(rainhdx.Platform):
+        simulation = True
+
         @property
         def default_clk_frequency(self):
             return 1e6
