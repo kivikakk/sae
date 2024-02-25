@@ -123,36 +123,38 @@ class MMURead(Component):
                 m.d.comb += self.read.rdy.eq(1)
 
                 with m.If(self.read.ack):
-                    with m.If(
-                        (self.read.width == AccessWidth.BYTE)
-                        & (self.read.addr == MMU.UART_OFFSET)
-                    ):
-                        with m.If(self.uart.rd_rdy):
-                            m.d.sync += [
-                                self.uart.rd_en.eq(1),
-                                self.read.value.eq(self.uart.rd_data),
-                                valid.eq(1),
-                            ]
-                            m.next = "uart.dessert"
-                        with m.Else():
-                            m.d.sync += [
-                                self.read.value.eq(0),
-                                valid.eq(
-                                    1
-                                ),  # ideally we actually identify there's nothing to read!
-                            ]
-                            m.next = "uart.dessert"  # XXX probably unnecessary
-                    with m.Else():
-                        m.d.sync += [
-                            valid.eq(0),
-                            self.port.addr.eq(self.read.addr >> 1),
-                        ]
-                        m.next = "pipe"
+                    m.d.sync += [
+                        valid.eq(0),
+                        self.port.addr.eq(self.read.addr >> 1),
+                    ]
+                    m.next = "pipe"
 
-            with m.State("uart.dessert"):
-                # may not need this state at all.
-                m.d.sync += self.uart.rd_en.eq(0)
-                m.next = "init"
+                    if self.uart:
+                        with m.If(
+                            (self.read.width == AccessWidth.BYTE)
+                            & (self.read.addr == MMU.UART_OFFSET)
+                        ):
+                            with m.If(self.uart.rd_rdy):
+                                m.d.sync += [
+                                    self.uart.rd_en.eq(1),
+                                    self.read.value.eq(self.uart.rd_data),
+                                    valid.eq(1),
+                                ]
+                                m.next = "uart.dessert"
+                            with m.Else():
+                                m.d.sync += [
+                                    self.read.value.eq(0),
+                                    valid.eq(
+                                        1
+                                    ),  # ideally we actually identify there's nothing to read!
+                                ]
+                                m.next = "uart.dessert"  # XXX probably unnecessary
+
+            if self.uart:
+                with m.State("uart.dessert"):
+                    # may not need this state at all.
+                    m.d.sync += self.uart.rd_en.eq(0)
+                    m.next = "init"
 
             with m.State("pipe"):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
