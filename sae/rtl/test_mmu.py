@@ -13,9 +13,9 @@ SYSMEM_TO_SHOW = 8
 def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
         print(
-            f"{prefix}MMUR: "
-            f"addr={(yield mr.read.addr):0>8x}  width={AccessWidth((yield mr.read.width))}  "
-            f"value={(yield mr.read.value):0>8x}  valid={(yield mr.read.valid):b}         ",
+            f"{prefix}MR: "
+            f"a={(yield mr.read.addr):0>8x}  w={AccessWidth((yield mr.read.width))}  "
+            f"v={(yield mr.read.value):0>8x}  v={(yield mr.read.valid):b}        ",
             end="",
         )
         if sysmem:
@@ -25,9 +25,9 @@ def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
         print()
     if mw:
         print(
-            f"{prefix}MMUW: "
-            f"addr={(yield mw.write.addr):0>8x}  width={AccessWidth((yield mw.write.width))}  "
-            f"data= {(yield mw.write.data):0>8x}  rdy={(yield mw.write.rdy):b}  ack={(yield mw.write.ack):b}    ",
+            f"{prefix}MW: "
+            f"a={(yield mw.write.addr):0>8x}  w={AccessWidth((yield mw.write.width))}  "
+            f"d={(yield mw.write.data):0>8x}  r={(yield mw.write.rdy):b}  a={(yield mw.write.ack):b}   ",
             end="",
         )
         if sysmem and not mr:

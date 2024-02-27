@@ -56,7 +56,7 @@ def run_until_fault(top, *, max_cycles=1000):
                 cycles += 1
                 insn = yield top.insn
                 print(
-                    f"pc={(yield top.pc):08x} [{insn:0>8x}]  {disasm(insn):<16} ",
+                    f"pc={(yield top.pc):08x} [{insn:0>8x}]  {disasm(insn):<20}",
                     end="",
                 )
                 for i in range(1, 32):

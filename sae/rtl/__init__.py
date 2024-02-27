@@ -1,4 +1,3 @@
-from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
 from typing import Optional
@@ -457,14 +456,15 @@ class Top(Elaboratable):
             self.wb_val.eq(value),
         ]
 
-    @contextmanager
     def jump(self, m, pc):
         # TODO: compare with m.If(pc[:2].any()).
         with m.If(pc[:2] != 0):
             self.fault(m, FaultCode.PC_MISALIGNED)
         with m.Else():
             m.d.sync += self.pc.eq(pc)
-            yield
+        # when used as contextmanager, statements in context only
+        # occur if the jump didn't fault align
+        return m.If(self.pc[:2] == 0)
 
     def fault(self, m, code, *, insn=None):
         m.d.sync += self.fault_code.eq(code)
