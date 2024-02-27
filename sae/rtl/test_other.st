@@ -124,6 +124,14 @@ test_bgeu:
     .word 0
     .assert
 
+test_j_fault:
+    .init
+    ;; "bne x0, x0, 1" / "j 1" aren't actually representable!
+    bne x0, x0, 2               ; doesn't fault since branch not taken
+    li a0, 95294
+    j 2
+    .assert faultcode=2, pc=0xc, a0=95294
+
 test_load_store:
     .init x1=0x0, x2=0x12345678
     sw x2, 0(x1)

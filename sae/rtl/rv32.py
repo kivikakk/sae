@@ -1,7 +1,7 @@
 import re
 from functools import partial
 
-from amaranth import unsigned
+from amaranth import C, unsigned
 from amaranth.lib.data import Struct
 from amaranth.lib.enum import IntEnum
 
@@ -22,6 +22,7 @@ __all__ = [
     "InsJ",
     "InsS",
     "InsB",
+    "disasm",
 ]
 
 INSNS = {}
@@ -174,17 +175,17 @@ class OpLoadFunct(IntEnum, shape=3):
     LHU = 0b101
 
 
-class OpStoreFunct(IntEnum, shape=3):
+class OpStoreFunct(IntEnum, shape=3):  # type: ignore
     SB = 0b000
     SH = 0b001
     SW = 0b010
 
 
-class OpMiscMemFunct(IntEnum, shape=3):
+class OpMiscMemFunct(IntEnum, shape=3):  # type: ignore
     FENCE = 0b000
 
 
-class OpSystemFunct(IntEnum, shape=15):
+class OpSystemFunct(IntEnum, shape=15):  # type: ignore
     ECALL = 0b000000000000000
     EBREAK = 0b000000000001000
 
@@ -299,6 +300,20 @@ def fence_arg(a):
         | (0b0100 if "o" in a else 0)
         | (0b1000 if "i" in a else 0)
     )
+
+
+def arg_fence(v):
+    assert not (v & ~0b1111)
+    a = []
+    if v & 0b1000:
+        a.append("i")
+    if v & 0b0100:
+        a.append("o")
+    if v & 0b0010:
+        a.append("r")
+    if v & 0b0001:
+        a.append("w")
+    return "".join(a)
 
 
 def fence(op, pred, succ, *, fm=0):
@@ -499,3 +514,53 @@ def jal(op, rd, imm):
 
 add_insn("jal", jal)
 add_insn("j", lambda op, imm: Jal(Reg.X0, imm))
+
+
+def decode(struct, value):
+    view = struct(C(value, 32))
+    result = {}
+    for field in struct._AggregateMeta__layout._fields:
+        slice = view[field]
+        assert type(slice).__name__ == "Slice"
+        v = (slice.value.value & (2**slice.stop - 1)) >> slice.start
+        result[field] = v
+    return result
+
+
+def c2(count, value):
+    sb = 1 << (count - 1)
+    if value & sb:
+        return -((sb << 1) - value)
+    return value
+
+
+def disasm(op):
+    v_i = decode(InsI, op)
+    v_b = decode(InsB, op)
+
+    match v_i["opcode"]:
+        case Opcode.LOAD:
+            imm = "0" if v_i["imm"] == 0 else f"0x{v_i['imm']:x}"
+            return f"{OpLoadFunct(v_i['funct3']).name.lower()} x{v_i['rd']}, {imm}(x{v_i['rs1']})"
+        case Opcode.MISC_MEM:
+            match v_i["funct3"]:
+                case OpMiscMemFunct.FENCE:
+                    succ = v_i["imm"] & 0xF
+                    pred = (v_i["imm"] >> 4) & 0xF
+                    fm = v_i["imm"] >> 8
+                    if fm == 0b1000 and succ == pred == 0b0011:
+                        return "fence.tso"
+                    return f"fence {arg_fence(pred)}, {arg_fence(succ)}"
+        case Opcode.BRANCH:
+            imm = c2(
+                13,
+                v_b["imm4_1"] << 1
+                | v_b["imm10_5"] << 5
+                | v_b["imm11"] << 11
+                | v_b["imm12"] << 12,
+            )
+            return f"{OpBranchFunct(v_b['funct3']).name.lower()} x{v_b['rs1']}, x{v_b['rs2']}, 0x{imm:x}"
+        case 0x7F:
+            if op == 0xFFFFFFFF:
+                return "invalid"
+    raise RuntimeError(f"unknown insn: {op:0>8x}")

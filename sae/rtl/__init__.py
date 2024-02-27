@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from itertools import islice
 from pathlib import Path
 from typing import Optional
@@ -49,6 +50,7 @@ class Top(Elaboratable):
     track_reg_written: bool
 
     state: Signal
+    resolving: Signal
     fault_code: Signal
     fault_insn: Signal
 
@@ -67,6 +69,7 @@ class Top(Elaboratable):
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
+        self.resolving = Signal()
         self.fault_code = Signal(FaultCode)
         self.fault_insn = Signal(self.ILEN)
 
@@ -135,9 +138,9 @@ class Top(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        with m.FSM():
-            # Blowing everything ridiculously apart before we start getting a
-            # pipeline going.
+        with m.FSM() as fsm:
+            m.d.comb += self.resolving.eq(fsm.ongoing("fetch.resolve"))
+
             with m.State("fetch.init"):
                 with m.If(self.wb_reg != 0):
                     m.d.sync += [
@@ -146,16 +149,12 @@ class Top(Elaboratable):
                     ]
                     if self.track_reg_written:
                         m.d.sync += self.xreg_written[self.wb_reg].eq(1)
-                with m.If(self.pc[:2].any()):
-                    m.d.sync += self.fault(FaultCode.PC_MISALIGNED)
-                    m.next = "faulted"
-                with m.Else():
-                    m.d.sync += [
-                        mmu.read.addr.eq(self.pc),
-                        mmu.read.width.eq(AccessWidth.WORD),
-                        mmu.read.ack.eq(1),
-                    ]
-                    m.next = "fetch.wait"
+                m.d.sync += [
+                    mmu.read.addr.eq(self.pc),
+                    mmu.read.width.eq(AccessWidth.WORD),
+                    mmu.read.ack.eq(1),
+                ]
+                m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
                 with m.If(mmu.read.valid):
@@ -166,8 +165,7 @@ class Top(Elaboratable):
                 insn = self.insn
                 assert len(insn) == self.ILEN
                 with m.If((insn[:16] == 0) | (insn == C(1, 1).replicate(self.ILEN))):
-                    m.d.sync += self.fault(FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
-                    m.next = "faulted"
+                    self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
                 with m.Else():
                     v_i = InsI(insn)
@@ -207,19 +205,17 @@ class Top(Elaboratable):
                                 with m.Case(OpLoadFunct.LBU):
                                     m.next = "lbu.delay"
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.MISC_MEM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpMiscMemFunct.FENCE):
                                     pass  # XXX no-op
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.OP_IMM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(OpImmFunct.ADDI):
@@ -257,10 +253,9 @@ class Top(Elaboratable):
                                         v_i.rd, rs1 >> v_i.imm[:5]
                                     )
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.OP):
                             with m.Switch(v_r.funct3):
                                 with m.Case(OpRegFunct.ADDSUB):
@@ -310,10 +305,9 @@ class Top(Elaboratable):
                                         >> self.xreg[v_r.rs2][:5],
                                     )
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                         with m.Case(Opcode.AUIPC):
@@ -338,10 +332,9 @@ class Top(Elaboratable):
                                 with m.Case(OpStoreFunct.SB):
                                     m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.BRANCH):
                             # TODO: we're meant to raise
                             # instruction-address-misaligned if the target
@@ -353,55 +346,51 @@ class Top(Elaboratable):
                             with m.Switch(v_b.funct3):
                                 with m.Case(OpBranchFunct.BEQ):
                                     with m.If(self.xreg[v_b.rs1] == self.xreg[v_b.rs2]):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Case(OpBranchFunct.BNE):
                                     with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Case(OpBranchFunct.BLT):
                                     with m.If(
                                         self.xreg[v_b.rs1].as_signed()
                                         < self.xreg[v_b.rs2].as_signed()
                                     ):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Case(OpBranchFunct.BGE):
                                     with m.If(
                                         self.xreg[v_b.rs1].as_signed()
                                         >= self.xreg[v_b.rs2].as_signed()
                                     ):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Case(OpBranchFunct.BLTU):
                                     with m.If(self.xreg[v_b.rs1] < self.xreg[v_b.rs2]):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Case(OpBranchFunct.BGEU):
                                     with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
-                                        m.d.sync += self.pc.eq(self.pc + imm)
+                                        self.jump(m, self.pc + imm)
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Case(Opcode.JALR):
-                            m.d.sync += [
-                                self.write_xreg(v_i.rd, self.pc + 4),
-                                self.pc.eq(
-                                    (self.xreg[v_i.rs1] + v_i.imm.as_signed())
-                                    & 0xFFFFFFFE
-                                ),
-                            ]
+                            with self.jump(
+                                m,
+                                (self.xreg[v_i.rs1] + v_i.imm.as_signed()) & 0xFFFFFFFE,
+                            ):
+                                m.d.sync += self.write_xreg(v_i.rd, self.pc + 4)
                         with m.Case(Opcode.JAL):
-                            m.d.sync += [
-                                self.write_xreg(v_j.rd, self.pc + 4),
-                                self.pc.eq(
-                                    self.pc
-                                    + Cat(  # meow! :|3
-                                        C(0, 1),
-                                        v_j.imm10_1,
-                                        v_j.imm11,
-                                        v_j.imm19_12,
-                                        v_j.imm20,
-                                    ).as_signed()
-                                ),
-                            ]
+                            with self.jump(
+                                m,
+                                self.pc
+                                + Cat(  # meow! :|3
+                                    C(0, 1),
+                                    v_j.imm10_1,
+                                    v_j.imm11,
+                                    v_j.imm19_12,
+                                    v_j.imm20,
+                                ).as_signed(),
+                            ):
+                                m.d.sync += self.write_xreg(v_j.rd, self.pc + 4)
                         with m.Case(Opcode.SYSTEM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(0):
@@ -411,20 +400,17 @@ class Top(Elaboratable):
                                         with m.Case(OpSystemFunct.EBREAK >> 3):
                                             m.d.sync += self.xreg[1].eq(0x77774444)
                                         with m.Default():
-                                            m.d.sync += self.fault(
-                                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                            self.fault(
+                                                m,
+                                                FaultCode.ILLEGAL_INSTRUCTION,
+                                                insn=insn,
                                             )
-                                            m.next = "faulted"
                                 with m.Default():
-                                    m.d.sync += self.fault(
-                                        FaultCode.ILLEGAL_INSTRUCTION, insn=insn
+                                    self.fault(
+                                        m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                                    m.next = "faulted"
                         with m.Default():
-                            m.d.sync += self.fault(
-                                FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                            )
-                            m.next = "faulted"
+                            self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
@@ -471,11 +457,20 @@ class Top(Elaboratable):
             self.wb_val.eq(value),
         ]
 
-    def fault(self, code, *, insn=None):
-        assigns = [self.fault_code.eq(code)]
+    @contextmanager
+    def jump(self, m, pc):
+        # TODO: compare with m.If(pc[:2].any()).
+        with m.If(pc[:2] != 0):
+            self.fault(m, FaultCode.PC_MISALIGNED)
+        with m.Else():
+            m.d.sync += self.pc.eq(pc)
+            yield
+
+    def fault(self, m, code, *, insn=None):
+        m.d.sync += self.fault_code.eq(code)
         if insn is not None:
-            assigns.append(self.fault_insn.eq(insn))
-        return assigns
+            m.d.sync += self.fault_insn.eq(insn)
+        m.next = "faulted"
 
 
 class DeployedTop(Elaboratable):
