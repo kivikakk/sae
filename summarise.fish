@@ -72,3 +72,7 @@ if test (count $rest) -gt 0
     echo Uncategorised:
     echo $rest
 end
+
+echo
+printf 'Total: %d\n' (multifind $ignore -prune -o -type f -print | xargs wc -l --total=only)
+printf '(ignoring %d files)\n' (multifind $ignore -type f | wc -l)
