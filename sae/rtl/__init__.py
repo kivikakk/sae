@@ -453,7 +453,6 @@ class Top(Elaboratable):
         ]
 
     def jump(self, m, pc):
-        # TODO: compare with m.If(pc[:2].any()).
         with m.If(pc[:2] != 0):
             self.fault(m, FaultCode.PC_MISALIGNED)
         with m.Else():
