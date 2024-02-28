@@ -68,12 +68,7 @@ def run_until_fault(hart, *, max_cycles=1000):
                         rn = Reg[f"X{i}"].friendly
                         print(f"  {rn}={(yield hart.xreg[i]):08x}", end="")
                 print()
-                yield from print_mmu(
-                    mr=hart.mmu.mmu_read,
-                    mw=hart.mmu.mmu_write,
-                    sysmem=hart.sysmem,
-                    prefix="  ",
-                )
+                yield from print_mmu(hart.mmu, prefix="  ")
                 print()
 
         results["pc"] = yield hart.pc
@@ -105,28 +100,27 @@ def run_until_fault_por(mem, **kwargs):
     )
 
 
-def print_mmu(*, mr=None, mw=None, sysmem=None, prefix=""):
-    if mr:
-        print(
-            f"{prefix}MR: "
-            f"a={(yield mr.read.addr):0>8x}  w={AccessWidth((yield mr.read.width))}  "
-            f"v={(yield mr.read.value):0>8x}  v={(yield mr.read.valid):b}        ",
-            end="",
-        )
-        if sysmem:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
-        print()
-    if mw:
-        print(
-            f"{prefix}MW: "
-            f"a={(yield mw.write.addr):0>8x}  w={AccessWidth((yield mw.write.width))}  "
-            f"d={(yield mw.write.data):0>8x}  r={(yield mw.write.rdy):b}  a={(yield mw.write.ack):b}   ",
-            end="",
-        )
-        if sysmem and not mr:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
-        print()
+def print_mmu(mmu, *, prefix=""):
+    mr = mmu.mmu_read
+    print(
+        f"{prefix}MR: "
+        f"a={(yield mr.read.addr):0>8x}  w={AccessWidth((yield mr.read.width))}  "
+        f"v={(yield mr.read.value):0>8x}  v={(yield mr.read.valid):b}        ",
+        end="",
+    )
+    print("data=", end="")
+    for i in range(min(SYSMEM_TO_SHOW, mmu.sysmem.depth)):
+        print(f"{(yield mmu.sysmem[i]):0>4x} ", end="")
+    print()
+
+    mw = mmu.mmu_write
+    print(
+        f"{prefix}MW: "
+        f"a={(yield mw.write.addr):0>8x}  w={AccessWidth((yield mw.write.width))}  "
+        f"d={(yield mw.write.data):0>8x}  r={(yield mw.write.rdy):b}  a={(yield mw.write.ack):b}   ",
+        end="",
+    )
+    print("     ", end="")
+    for i in range(SYSMEM_TO_SHOW, min(SYSMEM_TO_SHOW * 2, mmu.sysmem.depth)):
+        print(f"{(yield mmu.sysmem[i]):0>4x} ", end="")
+    print()

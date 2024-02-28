@@ -1,5 +1,6 @@
+import inspect
 import unittest
-from functools import partial
+from functools import partial, wraps
 
 from amaranth import Fragment
 from amaranth.lib.memory import Memory
@@ -10,13 +11,27 @@ from .mmu import MMU, AccessWidth
 from .test_utils import print_mmu
 
 
+def mmu_sim(inner):
+    first_self = next(iter(inspect.signature(inner).parameters))
+
+    @wraps(inner)
+    def wrapper(*args, **kwargs):
+        args = list(args)
+        init = args.pop(1 if first_self else 0)
+
+        mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
+        sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
+        sim.add_clock(1e-6)
+        sim.add_testbench(partial(inner, *args, mmu=mmu, **kwargs))
+        sim.run()
+
+    return wrapper
+
+
 class TestMMU(unittest.TestCase):
-    def waitFor(self, s, *, change_to, ticks, mr=None, mw=None, sysmem=None):
+    def waitFor(self, mmu, s, *, change_to, ticks):
         for i in range(ticks):
-            if mr or mw:
-                yield from print_mmu(
-                    mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({i}/{ticks}) -- "
-                )
+            yield from print_mmu(mmu, prefix=f"  waitFor ({i}/{ticks}) -- ")
             self.assertNotEqual(
                 change_to,
                 (yield s),
@@ -28,83 +43,63 @@ class TestMMU(unittest.TestCase):
             (yield s),
             f"{s} didn't change to {change_to} after {ticks} tick(s)",
         )
-        if mr or mw:
-            yield from print_mmu(
-                mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({ticks}/{ticks}) -- "
-            )
+        yield from print_mmu(mmu, prefix=f"  waitFor ({ticks}/{ticks}) -- ")
 
-    def assertRead(self, addr, width, value, mem):
+    @mmu_sim
+    def assertRead(self, addr, width, value, *, mmu):
         ticks = 2
         if addr & 1 and width != AccessWidth.BYTE:
             ticks += 1
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, mmu, _mr, _mw):
-            assert ((yield mmu.read.rdy))
-            yield mmu.read.addr.eq(addr)
-            yield mmu.read.width.eq(width)
-            yield mmu.read.ack.eq(1)
-            yield Tick()
-            yield mmu.read.ack.eq(0)
-            yield from self.waitFor(
-                mmu.read.valid, change_to=1, ticks=ticks, mr=_mr, sysmem=mmu.sysmem
-            )
-            self.assertEqual(value, (yield mmu.read.value))
+        assert ((yield mmu.read.rdy))
+        yield mmu.read.addr.eq(addr)
+        yield mmu.read.width.eq(width)
+        yield mmu.read.ack.eq(1)
+        yield Tick()
+        yield mmu.read.ack.eq(0)
+        yield from self.waitFor(mmu, mmu.read.valid, change_to=1, ticks=ticks)
+        self.assertEqual(value, (yield mmu.read.value))
 
-        self.simTestbench(bench, mem)
-
-    def assertWrite(self, imem, addr, width, value, omem):
+    @mmu_sim
+    def assertWrite(self, addr, width, value, omem, *, mmu):
         ticks = 0
         if addr & 1 and width != AccessWidth.BYTE:
             ticks += 1
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, mmu, _mw, _mr):
-            yield mmu.write.width.eq(width)
-            yield mmu.write.addr.eq(addr)
-            yield mmu.write.data.eq(value)
-            yield from self.waitFor(
-                mmu.write.rdy, change_to=1, ticks=1, mw=_mw, sysmem=mmu.sysmem
+        yield mmu.write.width.eq(width)
+        yield mmu.write.addr.eq(addr)
+        yield mmu.write.data.eq(value)
+        yield from self.waitFor(mmu, mmu.write.rdy, change_to=1, ticks=1)
+        yield mmu.write.ack.eq(1)
+        yield Tick()
+        yield mmu.write.ack.eq(0)
+        yield from self.waitFor(mmu, mmu.write.rdy, change_to=1, ticks=ticks)
+        yield Tick()
+        for i, (ex, s) in enumerate(zip(omem, mmu.sysmem)):
+            self.assertEqual(
+                ex,
+                (yield s),
+                f"failed at index {i}: omem {ex:0>4x} != sysmem {(yield s):0>4x}",
             )
-            yield mmu.write.ack.eq(1)
-            yield Tick()
-            yield mmu.write.ack.eq(0)
-            yield from self.waitFor(
-                mmu.write.rdy, change_to=1, ticks=ticks, mw=_mw, sysmem=mmu.sysmem
-            )
-            yield Tick()
-            for i, (ex, s) in enumerate(zip(omem, mmu.sysmem)):
-                self.assertEqual(
-                    ex,
-                    (yield s),
-                    f"failed at index {i}: omem {ex:0>4x} != sysmem {(yield s):0>4x}",
-                )
-
-        self.simTestbench(bench, imem)
-
-    def simTestbench(self, bench, init):
-        mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
-        sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
-        sim.add_clock(1e-6)
-        sim.add_testbench(partial(bench, mmu=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
-        sim.run()
 
     def test_read(self):
         mem = [0x1234, 0xABCD]
-        self.assertRead(0x00, AccessWidth.BYTE, 0x34, mem)
-        self.assertRead(0x01, AccessWidth.BYTE, 0x12, mem)
-        self.assertRead(0x02, AccessWidth.BYTE, 0xCD, mem)
-        self.assertRead(0x03, AccessWidth.BYTE, 0xAB, mem)
-        self.assertRead(0x00, AccessWidth.HALF, 0x1234, mem)
-        self.assertRead(0x01, AccessWidth.HALF, 0xCD12, mem)
-        self.assertRead(0x02, AccessWidth.HALF, 0xABCD, mem)
-        self.assertRead(0x03, AccessWidth.HALF, 0x34AB, mem)
-        self.assertRead(0x00, AccessWidth.WORD, 0xABCD1234, mem)
-        self.assertRead(0x01, AccessWidth.WORD, 0x34ABCD12, mem)
-        self.assertRead(0x02, AccessWidth.WORD, 0x1234ABCD, mem)
-        self.assertRead(0x03, AccessWidth.WORD, 0xCD1234AB, mem)
+        self.assertRead(mem, 0x00, AccessWidth.BYTE, 0x34)
+        self.assertRead(mem, 0x01, AccessWidth.BYTE, 0x12)
+        self.assertRead(mem, 0x02, AccessWidth.BYTE, 0xCD)
+        self.assertRead(mem, 0x03, AccessWidth.BYTE, 0xAB)
+        self.assertRead(mem, 0x00, AccessWidth.HALF, 0x1234)
+        self.assertRead(mem, 0x01, AccessWidth.HALF, 0xCD12)
+        self.assertRead(mem, 0x02, AccessWidth.HALF, 0xABCD)
+        self.assertRead(mem, 0x03, AccessWidth.HALF, 0x34AB)
+        self.assertRead(mem, 0x00, AccessWidth.WORD, 0xABCD1234)
+        self.assertRead(mem, 0x01, AccessWidth.WORD, 0x34ABCD12)
+        self.assertRead(mem, 0x02, AccessWidth.WORD, 0x1234ABCD)
+        self.assertRead(mem, 0x03, AccessWidth.WORD, 0xCD1234AB)
 
     def test_write(self):
         mem = [0xABCD, 0xEFFE]
