@@ -7,10 +7,9 @@ from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, ResetInserter,
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 
-from . import rv32
 from .mmu import MMU, AccessWidth
-from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
-                   OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
+from .rv32 import (ISA, InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct,
+                   Opcode, OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
                    OpStoreFunct, OpSystemFunct, Reg)
 from .uart import UART
 
@@ -67,6 +66,7 @@ class Hart(Elaboratable):
     XLEN = 32
     XCOUNT = 32
 
+    isa: ISA
     sysmem: Memory
     uart: UART
     reg_inits: Optional[dict[str, int]]
@@ -82,7 +82,8 @@ class Hart(Elaboratable):
     pc: Signal
     insn: Signal
 
-    def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
+    def __init__(self, *, isa=ISA.RVI, sysmem=None, reg_inits=None, track_reg_written=False):
+        self.isa = isa
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent / "test_shrimprw.bin", memory=8192
         )

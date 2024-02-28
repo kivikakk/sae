@@ -1,4 +1,5 @@
 import re
+from enum import Enum as PyEnum
 from functools import partial
 
 from amaranth import C, unsigned
@@ -6,6 +7,7 @@ from amaranth.lib.data import Struct
 from amaranth.lib.enum import IntEnum
 
 __all__ = [
+    "ISA",
     "INSNS",
     "Reg",
     "Opcode",
@@ -25,17 +27,21 @@ __all__ = [
     "disasm",
 ]
 
+
+class ISA(PyEnum):
+    RVI = 1
+    RVC = 2
+
+
 INSNS = {}
 
 
 def add_insn(op, f):
-    global INSNS, __all__
+    global INSNS
     name = op[0].upper() + op[1:]
     f.__name__ = name
     f = partial(f, op)
     INSNS[name] = f
-    globals()[name] = f
-    __all__.append(f)
 
 
 def value(struct, **kwargs):
@@ -227,7 +233,7 @@ for op in ["add", "slt", "sltu", "and", "or", "xor", "sll", "srl", "sub", "sra"]
 
     add_insn(op, f)
 
-add_insn("snez", lambda op, rd, rs: Sltu(rd, Reg.X0, rs))
+add_insn("snez", lambda op, rd, rs: INSNS["Sltu"](rd, Reg.X0, rs))
 
 
 # I:
@@ -344,25 +350,25 @@ for op in ["ecall", "ebreak"]:
 
 def li(op, rd, imm):
     if (imm & 0xFFF) == imm:
-        return Addi(rd, Reg.X0, imm)
+        return INSNS["Addi"](rd, Reg.X0, imm)
     if imm & 0x800:
         return [
-            *Lui(rd, imm >> 12),
-            *Addi(rd, rd, (imm & 0xFFF) >> 1),
-            *Addi(rd, rd, ((imm & 0xFFF) >> 1) + int(imm & 1)),
+            *INSNS["Lui"](rd, imm >> 12),
+            *INSNS["Addi"](rd, rd, (imm & 0xFFF) >> 1),
+            *INSNS["Addi"](rd, rd, ((imm & 0xFFF) >> 1) + int(imm & 1)),
         ]
     return [
-        *Lui(rd, imm >> 12),
-        *Addi(rd, rd, imm & 0xFFF),
+        *INSNS["Lui"](rd, imm >> 12),
+        *INSNS["Addi"](rd, rd, imm & 0xFFF),
     ]
 
 
 add_insn("li", li)
 
-add_insn("mv", lambda op, rd, rs: Addi(rd, rs, 0))
-add_insn("seqz", lambda op, rd, rs: Sltiu(rd, rs, 1))
-add_insn("not", lambda op, rd, rs: Xori(rd, rs, -1))
-add_insn("nop", lambda op: Addi(Reg.X0, Reg.X0, 0))
+add_insn("mv", lambda op, rd, rs: INSNS["Addi"](rd, rs, 0))
+add_insn("seqz", lambda op, rd, rs: INSNS["Sltiu"](rd, rs, 1))
+add_insn("not", lambda op, rd, rs: INSNS["Xori"](rd, rs, -1))
+add_insn("nop", lambda op: INSNS["Addi"](Reg.X0, Reg.X0, 0))
 
 for op in ["slli", "srli", "srai"]:
 
@@ -513,7 +519,7 @@ def jal(op, rd, imm):
 
 
 add_insn("jal", jal)
-add_insn("j", lambda op, imm: Jal(Reg.X0, imm))
+add_insn("j", lambda op, imm: INSNS["Jal"](Reg.X0, imm))
 
 
 def decode(struct, value):
@@ -628,8 +634,8 @@ def disasm(op):
                 return f"j {c2foff(21, imm)}"
             return f"jal x{v_j['rd']}, {c2foff(21, imm)}"
         case Opcode.SYSTEM:
-            if v_i['funct3'] == 0:
-                funct = OpSystemFunct(v_i['imm'] << 3)
+            if v_i["funct3"] == 0:
+                funct = OpSystemFunct(v_i["imm"] << 3)
                 return funct.name.lower()
         case 0x00:
             if op & 0xFFFF == 0:

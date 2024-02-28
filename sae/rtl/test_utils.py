@@ -10,7 +10,7 @@ from . import Hart, State
 from .rv32 import Reg, disasm
 from .test_mmu import pms
 
-__all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
+__all__ = ["run_until_fault"]
 
 
 @singledispatch
@@ -101,63 +101,3 @@ def run_until_fault_por(mem, **kwargs):
     return run_until_fault(
         Hart(sysmem=Memory(depth=len(mem), shape=16, init=mem), **kwargs)
     )
-
-
-class UnwrittenClass:
-    def __repr__(self):
-        return "Unwritten"
-
-
-Unwritten = UnwrittenClass()
-
-
-class InsnTestHelpers:
-    def __init__(self, *args):
-        super().__init__(*args)
-        self.body = None
-        self.results = None
-
-    def run_body(self, regs):
-        hart = Hart(
-            sysmem=Memory(
-                depth=len(self.body) + 2, shape=16, init=self.body + [0xFFFF, 0xFFFF]
-            ),
-            reg_inits=regs,
-            track_reg_written=True,
-        )
-        self.results = run_until_fault(hart)
-        self.body = None
-        self.__asserted = set(
-            ["pc", "faultcode", "faultinsn"]
-        )  # don't include these in 'rest'
-
-    def assertReg(self, rn, v):
-        self.__asserted.add(rn)
-        self.assertRegValue(v, self.results.get(rn, Unwritten), rn=rn)
-
-    def assertRegRest(self, v):
-        for name, result in self.results.items():
-            if name in self.__asserted:
-                continue
-            self.assertRegValue(v, result, rn=name)
-
-    def assertRegValue(self, expected, actual, *, rn=None):
-        if rn is not None:
-            rn = f"{rn!r}="
-        if expected is Unwritten or actual is Unwritten:
-            self.assertIs(
-                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
-            )
-            return
-        if isinstance(expected, int):
-            if expected < 0:
-                expected += 2**32  # XLEN
-            self.assertEqual(
-                expected,
-                actual,
-                f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}",
-            )
-        else:
-            self.assertEqual(
-                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
-            )
