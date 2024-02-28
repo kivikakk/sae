@@ -2,9 +2,21 @@
 
 * ISA
 
-** TODO RV32E
+** DONE RV32E
+OK that was very easy.  See =rv32e= branch.
 
-** TODO RV32C
+** TODO RV64I
+It's actually a very minor addition.
+
+** STRT "C" extension
+
+Easy to compile for.
+
+** TODO "M" extension
+
+** TODO "A" extension
+
+** TODO "Zicsr": CSR insns
 
 * Extras
 
