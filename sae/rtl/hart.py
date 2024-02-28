@@ -8,6 +8,7 @@ from amaranth.lib.memory import Memory
 
 from .mmu import MMU, AccessWidth
 from .rv32 import (
+    ISA,
     InsB,
     InsI,
     InsJ,
@@ -45,6 +46,7 @@ class Hart(Elaboratable):
     XLEN = 32
     XCOUNT = 32
 
+    isa: ISA
     sysmem: Memory
     reg_inits: dict[str, int]
     track_reg_written: bool
@@ -70,7 +72,7 @@ class Hart(Elaboratable):
     xrd2_reg: Signal
     xrd2_val: Signal
 
-    def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
+    def __init__(self, *, isa=ISA.RVI, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent.parent.parent / "tests" / "test_shrimprw.bin",
             memory=8192,

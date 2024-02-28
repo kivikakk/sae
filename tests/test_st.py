@@ -2,15 +2,17 @@ import inspect
 import re
 import unittest
 from contextlib import contextmanager
-from functools import singledispatchmethod
+from functools import singledispatch
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+
+from amaranth.lib.memory import Memory
 
 from sae import st
 from sae.rtl.hart import FaultCode, Hart
-from sae.rtl.rv32 import INSNS, Reg
+from sae.rtl.rv32 import INSNS, ISA, Reg
 
-from .test_utils import InsnTestHelpers, Unwritten
+from .test_utils import run_until_fault
 
 
 class StError(RuntimeError):
@@ -35,7 +37,54 @@ def annotate_exceptions(filename, line):
         raise StError(filename, line.lineno, line.line) from e
 
 
-class StTestCase(InsnTestHelpers, unittest.TestCase):
+def parse_pairs(args, *, allow_atoms=False):
+    pairs = {}
+    rest = []
+    for arg in args:
+        if isinstance(arg, str):
+            rest.append(arg)
+        elif isinstance(arg.register, str):
+            pairs[arg.register] = arg.assign
+        else:
+            pairs[Reg(arg.register.register.upper())] = arg.assign
+    if allow_atoms:
+        return pairs, rest
+    assert not rest, "unpaired arguments but allow_atoms=False"
+    return pairs
+
+
+@singledispatch
+def translate_arg(arg, name):
+    if isinstance(arg, st.Register):
+        return Reg(arg.register.upper())
+    elif isinstance(arg, (int, st.Offset)):
+        return arg
+    elif name in ("pred", "succ"):
+        return arg
+    raise RuntimeError(f"arg weh {name!r} = {arg!r}")
+
+
+@translate_arg.register(list)
+def translate_arg_list(args, names):
+    return [translate_arg(arg, name) for arg, name in zip(args, names)]
+
+
+class UnwrittenClass:
+    def __repr__(self):
+        return "Unwritten"
+
+
+Unwritten = UnwrittenClass()
+
+
+class StTestCase(unittest.TestCase):
+    _isa: ISA
+    _reg_inits: dict[str | Reg, Any]
+    _body: list[int]
+    _rest_unwritten: bool = False
+    _results: dict[str | Reg, Any]
+    _asserted: set[str | Reg]
+
     def __init_subclass__(cls):
         super().__init_subclass__()
 
@@ -45,64 +94,41 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
 
         for name, body in parser.results:
             if name.startswith("test_"):
-                setattr(cls, name, lambda self, body=body: cls.run_st(self, body))
+                setattr(cls, name, lambda self, body=body: cls.st_runner(self, body))
 
-    @singledispatchmethod
-    @classmethod
-    def translate_arg(cls, arg, name):
-        if isinstance(arg, st.Register):
-            return Reg(arg.register.upper())
-        elif isinstance(arg, (int, st.Offset)):
-            return arg
-        elif name in ("pred", "succ"):
-            return arg
-        raise RuntimeError(f"arg weh {name!r} = {arg!r}")
+    def init_st(self, args, *, isa=ISA.RVI, body=None):
+        self.fish_st()
 
-    @translate_arg.register(list)
-    def translate_arg_list(cls, args, names):
-        return [cls.translate_arg(arg, name) for arg, name in zip(args, names)]
-
-    def _init_st(self, *, body=None, reg_inits=None):
-        if hasattr(self, "_rest_unwritten"):
-            self._fish_st()
-        self._reg_inits = reg_inits or {}
-        self.body = body or []
-        self.results = None
+        self._isa = ISA.RVI
+        self._reg_inits, rest = parse_pairs(args, allow_atoms=True)
+        if "rvc" in rest:
+            self._isa = ISA.RVC
+            rest.remove("rvc")
+        assert not rest, "remaining init args"
+        self._body = body or []
         self._rest_unwritten = True
+        self._results = None
 
-    @staticmethod
-    def _parse_pairs(args):
-        return {
-            (
-                assign.register
-                if isinstance(assign.register, str)
-                else Reg(assign.register.register.upper())
-            ): assign.assign
-            for assign in args
-        }
-
-    def run_st(self, body):
+    def st_runner(self, body):
         for line in body:
             with annotate_exceptions(self.filename, line):
                 match line:
                     case st.Pragma(kind="init", args=args):
-                        self._init_st(reg_inits=self._parse_pairs(args))
+                        self.init_st(args)
                     case st.Op(opcode=opcode, args=args):
                         insn = INSNS[opcode[0].upper() + opcode[1:]]
-                        args = self.translate_arg(
-                            args, inspect.signature(insn).parameters.keys()
-                        )
+                        args = translate_arg(args, inspect.signature(insn).parameters)
                         ops = insn(*args)
                         if not isinstance(ops, list):
                             ops = [ops]
-                        self.body.extend(ops)
+                        self._body.extend(ops)
                     case st.Pragma(kind="assert", args=args) | st.Pragma(
                         kind="assert~", args=args
                     ):
                         self._rest_unwritten = not line.kind.endswith("~")
-                        asserts = self._parse_pairs(args)
-                        if self.results is None:
-                            self.run_body(self._reg_inits)
+                        asserts = parse_pairs(args)
+                        if self._results is None:
+                            self.run_st_sim()
                             faultcode = asserts.pop(
                                 "faultcode", FaultCode.ILLEGAL_INSTRUCTION
                             )
@@ -127,27 +153,75 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                             )
                         for reg, assign in asserts.items():
                             self.assertReg(reg, assign)
+                    case st.Pragma(kind="half", args=[h]):
+                        self._body.append(h & 0xFFFF)
                     case st.Pragma(kind="word", args=[w]):
-                        self.body.append(w & 0xFFFF)
-                        self.body.append((w >> 16) & 0xFFFF)
+                        self._body.append(w & 0xFFFF)
+                        self._body.append((w >> 16) & 0xFFFF)
                     case st.Pragma(kind="rtf", args=[f, *pairs]):
-                        self._init_st(
+                        self.init_st(
+                            pairs,
                             body=Hart.sysmem_init_for(
                                 Path(__file__).parent / f.decode()
                             ),
-                            reg_inits=self._parse_pairs(pairs),
                         )
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")
-        self._fish_st()
+        self.fish_st()
 
-    def _fish_st(self):
-        if self._rest_unwritten and self.results is not None:
+    def run_st_sim(self):
+        hart = Hart(
+            sysmem=Memory(
+                depth=len(self._body) + 2, shape=16, init=self._body + [0xFFFF, 0xFFFF]
+            ),
+            reg_inits=self._reg_inits,
+            track_reg_written=True,
+        )
+        self._results = run_until_fault(hart)
+        self._body = None
+        self._asserted = set(
+            ["pc", "faultcode", "faultinsn"]
+        )  # don't include these in 'rest'
+
+
+    def fish_st(self):
+        if self._rest_unwritten and self._results is not None:
             self.assertRegRest(Unwritten)
 
+    def assertReg(self, rn, v):
+        self._asserted.add(rn)
+        self.assertRegValue(v, self._results.get(rn, Unwritten), rn=rn)
 
-TEST_REPLACEMENT = re.compile(r"(?:\A|[^a-zA-Z]+)[a-zA-Z]")
+    def assertRegRest(self, v):
+        for name, result in self._results.items():
+            if name in self._asserted:
+                continue
+            self.assertRegValue(v, result, rn=name)
+
+    def assertRegValue(self, expected, actual, *, rn=None):
+        if rn is not None:
+            rn = f"{rn!r}="
+        if expected is Unwritten or actual is Unwritten:
+            self.assertIs(
+                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
+            )
+            return
+        if isinstance(expected, int):
+            if expected < 0:
+                expected += 2**32  # XLEN
+            self.assertEqual(
+                expected,
+                actual,
+                f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}",
+            )
+        else:
+            self.assertEqual(
+                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
+            )
+
+
+TEST_REPLACEMENT = re.compile(r"(?:\A|[^a-zA-Z0-9]+)[a-zA-Z0-9]")
 for test_file in Path(__file__).parent.glob("test_*.st"):
     name = TEST_REPLACEMENT.sub(lambda t: t[0][-1].upper(), Path(test_file).name)
     globals()[name] = type(StTestCase)(name, (StTestCase,), {"filename": test_file})
