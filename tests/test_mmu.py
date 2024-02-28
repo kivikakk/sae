@@ -8,47 +8,14 @@ from amaranth.sim import Simulator
 from sae.rtl.mmu import MMU, AccessWidth
 from sae.targets import test
 
-SYSMEM_TO_SHOW = 8
+from .test_utils import print_mmu
 
 
-def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
-    if mr:
-        print(
-            f"{prefix}MR: "
-            f"a={ctx.get(mr.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.req.payload.width)).name}  "
-            f"v={ctx.get(mr.resp.payload):0>8x}  v={ctx.get(mr.resp.valid):b}        ",
-            end="",
-        )
-        if sysmem:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
-        print()
-    if mw:
-        print(
-            f"{prefix}MW: "
-            f"a={ctx.get(mw.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.req.payload.width)).name}  "
-            f"d={ctx.get(mw.req.payload.data):0>8x}  r={ctx.get(mw.req.ready):b}  a={ctx.get(mw.req.valid):b}   ",
-            end="",
-        )
-        if sysmem and not mr:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
-        print()
-
-
-class TestBase:
+class TestMMU(unittest.TestCase):
     async def waitFor(self, ctx, s, *, change_to, ticks, mr=None, mw=None, sysmem=None):
         for i in range(ticks):
             if mr or mw:
-                pms(
-                    ctx,
-                    mr=mr,
-                    mw=mw,
-                    sysmem=sysmem,
-                    prefix=f"  waitFor ({i}/{ticks}) -- ",
-                )
+                print_mmu(ctx, mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({i}/{ticks}) -- ")
             self.assertNotEqual(
                 change_to,
                 ctx.get(s),
@@ -61,13 +28,7 @@ class TestBase:
             f"{s.name} didn't change to {change_to} after {ticks} tick(s)",
         )
         if mr or mw:
-            pms(
-                ctx,
-                mr=mr,
-                mw=mw,
-                sysmem=sysmem,
-                prefix=f"  waitFor ({ticks}/{ticks}) -- ",
-            )
+            print_mmu(ctx, mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({ticks}/{ticks}) -- ")
 
     def assertRead(self, addr, width, value, mem):
         ticks = 2
@@ -130,8 +91,6 @@ class TestBase:
 
         self.simTestbench(bench, imem)
 
-
-class TestMMU(unittest.TestCase, TestBase):
     def simTestbench(self, bench, init):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(Fragment.get(mmu, platform=test()))
