@@ -7,41 +7,14 @@ from amaranth.sim import Simulator, Tick
 from rainhdx import Platform
 
 from .mmu import MMU, AccessWidth
-
-SYSMEM_TO_SHOW = 8
-
-def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
-    if mr:
-        print(
-            f"{prefix}MR: "
-            f"a={(yield mr.read.addr):0>8x}  w={AccessWidth((yield mr.read.width))}  "
-            f"v={(yield mr.read.value):0>8x}  v={(yield mr.read.valid):b}        ",
-            end="",
-        )
-        if sysmem:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
-        print()
-    if mw:
-        print(
-            f"{prefix}MW: "
-            f"a={(yield mw.write.addr):0>8x}  w={AccessWidth((yield mw.write.width))}  "
-            f"d={(yield mw.write.data):0>8x}  r={(yield mw.write.rdy):b}  a={(yield mw.write.ack):b}   ",
-            end="",
-        )
-        if sysmem and not mr:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
-        print()
+from .test_utils import print_mmu
 
 
-class TestBase:
+class TestMMU(unittest.TestCase):
     def waitFor(self, s, *, change_to, ticks, mr=None, mw=None, sysmem=None):
         for i in range(ticks):
             if mr or mw:
-                yield from pms(
+                yield from print_mmu(
                     mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({i}/{ticks}) -- "
                 )
             self.assertNotEqual(
@@ -56,7 +29,7 @@ class TestBase:
             f"{s} didn't change to {change_to} after {ticks} tick(s)",
         )
         if mr or mw:
-            yield from pms(
+            yield from print_mmu(
                 mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({ticks}/{ticks}) -- "
             )
 
@@ -68,7 +41,7 @@ class TestBase:
             ticks += 1
 
         def bench(*, mmu, _mr, _mw):
-            assert((yield mmu.read.rdy))
+            assert ((yield mmu.read.rdy))
             yield mmu.read.addr.eq(addr)
             yield mmu.read.width.eq(width)
             yield mmu.read.ack.eq(1)
@@ -111,8 +84,6 @@ class TestBase:
 
         self.simTestbench(bench, imem)
 
-
-class TestMMU(unittest.TestCase, TestBase):
     def simTestbench(self, bench, init):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
