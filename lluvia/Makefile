@@ -1,5 +1,5 @@
-ASFLAGS = -march=rv32i -mabi=ilp32
-CFLAGS  = -march=rv32i -mabi=ilp32 -O2
+ASFLAGS = -march=rv32ic -mabi=ilp32
+CFLAGS  = -march=rv32ic -mabi=ilp32 -O2
 LDFLAGS = -T linker.ld
 
 all: ../sae/rtl/test_shrimple.bin ../sae/rtl/test_shrimprw.bin
