@@ -2,7 +2,7 @@ from amaranth import ClockSignal, Elaboratable, Module, ResetSignal
 from amaranth.asserts import Assert, Assume, Cover
 from rainhdx import FormalHelper
 
-from ..rtl import Top as RtlTop
+from ..rtl import Hart
 
 
 class Top(FormalHelper, Elaboratable):
@@ -26,14 +26,14 @@ class Top(FormalHelper, Elaboratable):
         m.d.comb += Assume(self.sync_clk == ~sync_clk_past)
         m.d.comb += Assume(~self.sync_rst)
 
-        m.submodules.top = top = RtlTop()
+        m.submodules.hart = hart = Hart()
 
         # pc should always be divisible by 4
-        m.d.comb += Assert(top.pc[:2] == 0)
+        m.d.comb += Assert(hart.pc[:2] == 0)
 
-        m.d.comb += Cover(top.pc == 0)
-        m.d.comb += Cover(top.pc == 4)
-        m.d.comb += Cover(top.pc == 8)
-        m.d.comb += Cover(top.pc == 12)
+        m.d.comb += Cover(hart.pc == 0)
+        m.d.comb += Cover(hart.pc == 4)
+        m.d.comb += Cover(hart.pc == 8)
+        m.d.comb += Cover(hart.pc == 12)
 
         return m

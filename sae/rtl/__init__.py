@@ -16,6 +16,7 @@ from .uart import UART
 
 __all__ = [
     "Top",
+    "Hart",
     "State",
     "FaultCode",
 ]
@@ -39,6 +40,29 @@ class LsSize(IntEnum, shape=2):  # type: ignore
 
 
 class Top(Elaboratable):
+    def __init__(self, *args, **kwargs):
+        self.hart = Hart(*args, **kwargs)
+
+    def elaborate(self, platform):
+        from .. import icebreaker
+
+        m = Module()
+
+        rst = Signal()
+        m.d.sync += rst.eq(0)
+
+        match platform:
+            case icebreaker():
+                plat_button = platform.request("button")
+                with m.If(plat_button.i):
+                    m.d.sync += rst.eq(1)
+
+        m.submodules.hart = ResetInserter(rst)(self.hart)
+
+        return m
+
+
+class Hart(Elaboratable):
     ILEN = 32
     XLEN = 32
     XCOUNT = 32
@@ -466,26 +490,3 @@ class Top(Elaboratable):
         if insn is not None:
             m.d.sync += self.fault_insn.eq(insn)
         m.next = "faulted"
-
-
-class DeployedTop(Elaboratable):
-    def __init__(self, *args, **kwargs):
-        self.top = Top(*args, **kwargs)
-
-    def elaborate(self, platform):
-        from .. import icebreaker
-
-        m = Module()
-
-        rst = Signal()
-        m.d.sync += rst.eq(0)
-
-        match platform:
-            case icebreaker():
-                plat_button = platform.request("button")
-                with m.If(plat_button.i):
-                    m.d.sync += rst.eq(1)
-
-        m.submodules.top = ResetInserter(rst)(self.top)
-
-        return m

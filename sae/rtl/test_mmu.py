@@ -67,17 +67,17 @@ class TestBase:
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, top, _mr, _mw):
-            assert((yield top.read.rdy))
-            yield top.read.addr.eq(addr)
-            yield top.read.width.eq(width)
-            yield top.read.ack.eq(1)
+        def bench(*, mmu, _mr, _mw):
+            assert((yield mmu.read.rdy))
+            yield mmu.read.addr.eq(addr)
+            yield mmu.read.width.eq(width)
+            yield mmu.read.ack.eq(1)
             yield Tick()
-            yield top.read.ack.eq(0)
+            yield mmu.read.ack.eq(0)
             yield from self.waitFor(
-                top.read.valid, change_to=1, ticks=ticks, mr=_mr, sysmem=top.sysmem
+                mmu.read.valid, change_to=1, ticks=ticks, mr=_mr, sysmem=mmu.sysmem
             )
-            self.assertEqual(value, (yield top.read.value))
+            self.assertEqual(value, (yield mmu.read.value))
 
         self.simTestbench(bench, mem)
 
@@ -88,21 +88,21 @@ class TestBase:
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, top, _mw, _mr):
-            yield top.write.width.eq(width)
-            yield top.write.addr.eq(addr)
-            yield top.write.data.eq(value)
+        def bench(*, mmu, _mw, _mr):
+            yield mmu.write.width.eq(width)
+            yield mmu.write.addr.eq(addr)
+            yield mmu.write.data.eq(value)
             yield from self.waitFor(
-                top.write.rdy, change_to=1, ticks=1, mw=_mw, sysmem=top.sysmem
+                mmu.write.rdy, change_to=1, ticks=1, mw=_mw, sysmem=mmu.sysmem
             )
-            yield top.write.ack.eq(1)
+            yield mmu.write.ack.eq(1)
             yield Tick()
-            yield top.write.ack.eq(0)
+            yield mmu.write.ack.eq(0)
             yield from self.waitFor(
-                top.write.rdy, change_to=1, ticks=ticks, mw=_mw, sysmem=top.sysmem
+                mmu.write.rdy, change_to=1, ticks=ticks, mw=_mw, sysmem=mmu.sysmem
             )
             yield Tick()
-            for i, (ex, s) in enumerate(zip(omem, top.sysmem)):
+            for i, (ex, s) in enumerate(zip(omem, mmu.sysmem)):
                 self.assertEqual(
                     ex,
                     (yield s),
@@ -117,7 +117,7 @@ class TestMMU(unittest.TestCase, TestBase):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
         sim.add_clock(1e-6)
-        sim.add_testbench(partial(bench, top=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
+        sim.add_testbench(partial(bench, mmu=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
         sim.run()
 
     def test_read(self):

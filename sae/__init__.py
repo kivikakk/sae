@@ -8,7 +8,7 @@ __all__ = ["Sae", "icebreaker"]
 
 class Sae(rainhdx.Project):
     name = "sae"
-    top = rtl.DeployedTop
+    top = rtl.Top
     formal_top = formal.Top
 
 

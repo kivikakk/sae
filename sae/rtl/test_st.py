@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from .. import st
-from . import FaultCode, Top
+from . import FaultCode, Hart
 from .rv32 import INSNS, Reg
 from .test_utils import InsnTestHelpers, Unwritten
 
@@ -128,7 +128,7 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                         self.body.append((w >> 16) & 0xFFFF)
                     case st.Pragma(kind="rtf", args=[f, *pairs]):
                         self._init_st(
-                            body=Top.sysmem_init_for(
+                            body=Hart.sysmem_init_for(
                                 Path(__file__).parent / f.decode()
                             ),
                             reg_inits=self._parse_pairs(pairs),
