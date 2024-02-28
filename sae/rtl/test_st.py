@@ -92,8 +92,8 @@ class StTestCase(unittest.TestCase):
             parser.feed(f.readlines())
 
         for name, body in parser.results:
-            if name.startswith("test_"):
-                setattr(cls, name, lambda self, body=body: cls.st_runner(self, body))
+            assert name.startswith("test_"), f"what do i do with {name!r}?"
+            setattr(cls, name, lambda self, body=body: cls.st_runner(self, body))
 
     def init_st(self, args, *, isa=ISA.RVI, body=None):
         self.fish_st()
@@ -179,7 +179,6 @@ class StTestCase(unittest.TestCase):
         self._asserted = set(
             ["pc", "faultcode", "faultinsn"]
         )  # don't include these in 'rest'
-
 
     def fish_st(self):
         if self._rest_unwritten and self._results is not None:
