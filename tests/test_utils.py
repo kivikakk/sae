@@ -64,7 +64,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                         rn = Reg[f"X{i}"].friendly
                         print(f"  {rn}={ctx.get(hart.xmem.data[i]):08x}", end="")
                 print()
-                print_mmu(ctx, mr=hart.mmu.read, mw=hart.mmu.write, sysmem=hart.sysmem, prefix="  ")
+                print_mmu(ctx, hart.mmu, prefix="  ")
                 print()
 
         results["pc"] = ctx.get(hart.pc)
@@ -96,28 +96,27 @@ def run_until_fault_por(mem, **kwargs):
     )
 
 
-def print_mmu(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
-    if mr:
-        print(
-            f"{prefix}MR: "
-            f"a={ctx.get(mr.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.req.payload.width)).name}  "
-            f"v={ctx.get(mr.resp.payload):0>8x}  v={ctx.get(mr.resp.valid):b}        ",
-            end="",
-        )
-        if sysmem:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
-        print()
-    if mw:
-        print(
-            f"{prefix}MW: "
-            f"a={ctx.get(mw.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.req.payload.width)).name}  "
-            f"d={ctx.get(mw.req.payload.data):0>8x}  r={ctx.get(mw.req.ready):b}  a={ctx.get(mw.req.valid):b}   ",
-            end="",
-        )
-        if sysmem and not mr:
-            print("data=", end="")
-            for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
-        print()
+def print_mmu(ctx, mmu, *, prefix=""):
+    mr = mmu.read
+    print(
+        f"{prefix}MR: "
+        f"a={ctx.get(mr.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.req.payload.width)).name}  " # XXX use value, not name of AW
+        f"v={ctx.get(mr.resp.payload):0>8x}  v={ctx.get(mr.resp.valid):b}        ",
+        end="",
+    )
+    print("data=", end="")
+    for i in range(min(SYSMEM_TO_SHOW, mmu.sysmem.depth)):
+        print(f"{ctx.get(mmu.sysmem.data[i]):0>4x} ", end="")
+    print()
+
+    mw = mmu.write
+    print(
+        f"{prefix}MW: "
+        f"a={ctx.get(mw.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.req.payload.width)).name}  "
+        f"d={ctx.get(mw.req.payload.data):0>8x}  r={ctx.get(mw.req.ready):b}  a={ctx.get(mw.req.valid):b}   ",
+        end="",
+    )
+    print("data=", end="")
+    for i in range(SYSMEM_TO_SHOW, min(SYSMEM_TO_SHOW * 2, mmu.sysmem.depth)):
+        print(f"{ctx.get(mmu.sysmem.data[i]):0>4x} ", end="")
+    print()
