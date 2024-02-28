@@ -335,10 +335,6 @@ class Top(Elaboratable):
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
                         with m.Case(Opcode.BRANCH):
-                            # TODO: we're meant to raise
-                            # instruction-address-misaligned if the target
-                            # address isn't 4-byte aligned (modulo RVC) **iff**
-                            # the condition evaluates to true.
                             imm = Cat(  # meow :3
                                 C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
                             ).as_signed()
@@ -464,7 +460,7 @@ class Top(Elaboratable):
             m.d.sync += self.pc.eq(pc)
         # when used as contextmanager, statements in context only
         # occur if the jump didn't fault align
-        return m.If(self.pc[:2] == 0)
+        return m.If(pc[:2] == 0)
 
     def fault(self, m, code, *, insn=None):
         m.d.sync += self.fault_code.eq(code)
