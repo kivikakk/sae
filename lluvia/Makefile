@@ -1,8 +1,13 @@
-ASFLAGS = -march=rv32ic -mabi=ilp32
-CFLAGS  = -march=rv32ic -mabi=ilp32 -O2
+MARCH = -march=rv32ic
+MABI  = -mabi=ilp32
+
+ASFLAGS = $(MARCH) $(MABI)
+CFLAGS  = $(MARCH) $(MABI) -O2
 LDFLAGS = -T linker.ld
 
-all: ../sae/rtl/test_shrimple.bin ../sae/rtl/test_shrimprw.bin
+all: \
+	../sae/rtl/test_shrimple.bin \
+	../sae/rtl/test_shrimprw.bin \
 
 ../sae/rtl/test_%.bin: %.bin
 	cp $< $@
