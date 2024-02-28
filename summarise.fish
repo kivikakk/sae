@@ -51,6 +51,7 @@ set other \( \
     -path \*/rainhdx/__init__.py -o \
     -path \*/rainhdx/logger.py -o \
     -path \*/rainhdx/platform.py -o \
+    -name \*.org -o \
     -false \
 \)
 
