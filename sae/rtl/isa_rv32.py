@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import re
 
 from amaranth import unsigned
@@ -5,6 +7,8 @@ from amaranth.lib.enum import IntEnum
 
 from .isa import ISA
 from .rv32 import Opcode, Reg
+
+__all__ = ["RV32I", "RV32IC"]
 
 
 class RV32I(ISA):
@@ -104,3 +108,54 @@ class RV32I(ISA):
         B = ("opcode", "imm11", "imm4_1", "funct3", "rs1", "rs2", "imm10_5", "imm12")
         U = ("opcode", "rd", "imm")
         J = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
+
+
+class RV32IC(RV32I):
+    class Op(IntEnum, shape=2):
+        C0 = 0b00
+        C1 = 0b01
+        C2 = 0b10
+
+    Reg_ = ISA.RegisterSpecifier(
+        3,
+        [
+            ("s0", "x8"),
+            ("s1", "x9"),
+            ("a0", "x10"),
+            ("a1", "x11"),
+            ("a2", "x12"),
+            ("a3", "x13"),
+            ("a4", "x14"),
+            ("a5", "x15"),
+        ],
+    )
+
+    class IL(ISA.ILayouts, len=16):
+        op: Op
+        rs2: Reg
+        rdrs1: Reg
+        rd_: Reg_
+        rs1_: Reg_
+        rs2_: Reg_
+        rd_rs1_: Reg_
+        jump_target: unsigned(11)
+
+        def resolve(
+            il,
+            name,
+            *,
+            functn=re.compile(r"\Afunct(\d+)\Z"),
+        ):
+            if m := functn.match(name):
+                return unsigned(int(m[1]))
+            assert False, f"unhandled: {name!r}"
+
+        CR = ("op", "rs2", "rdrs1", "funct4")
+        CI = ("op", ("imm", 5), "rdrs1", ("imm2", 1), "funct3")
+        CSS = ("op", "rs2", ("imm", 6), "funct3")
+        CIW = ("op", "rd_", ("imm", 8), "funct3")
+        CL = ("op", "rd_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
+        CS = ("op", "rs2_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
+        CA = ("op", "rs2_", "funct2", "rd_rs1_", "funct6")
+        CB = ("op", ("offset", 5), "rs1_", ("offset2", 3), "funct3")
+        CJ = ("op", "jump_target", "funct3")
