@@ -115,7 +115,7 @@ class StTestCase(unittest.TestCase):
                     case st.Pragma(kind="init", args=args):
                         self.init_st(args)
                     case st.Op(opcode=opcode, args=args):
-                        insn = INSNS[opcode[0].upper() + opcode[1:]]
+                        insn = INSNS[opcode]
                         args = translate_arg(args, inspect.signature(insn).parameters)
                         ops = insn(*args)
                         if not isinstance(ops, list):
