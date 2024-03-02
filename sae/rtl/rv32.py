@@ -165,7 +165,7 @@ class OpRegFunct(IntEnum, shape=3):
     SR = 0b101
 
 
-class OpBranchFunct(IntEnum, shape=3): # type: ignore
+class OpBranchFunct(IntEnum, shape=3):  # type: ignore
     BEQ = 0b000
     BNE = 0b001
     BLT = 0b100

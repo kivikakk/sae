@@ -2,7 +2,7 @@ import re
 from contextlib import contextmanager
 
 from amaranth import unsigned
-from amaranth.lib.data import Struct
+from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
 """
@@ -55,7 +55,7 @@ class ISA:
                 case str():
                     members[ax.upper()] = i
                 case _:
-                    raise TypeError(f"Unknown specifier {ax!r}.")
+                    raise TypeError(f"Unknown name specifier {ax!r}.")
 
         class Register(IntEnum, shape=size):
             locals().update(members)
@@ -85,22 +85,46 @@ class ISA:
         yield cls.ILayoutHelper()
 
     class ILayoutHelper:
+        _unset = object()
+
         def __init__(self):
             self._registered = {}
-            self._default = None
+            self._default_len = None
+            self._default_type_fn = None
 
         def register(self, **kwargs):
             self._registered.update(kwargs)
 
-        def default(self, f):
-            self._default = f
+        def default(self, *, len=_unset, type_fn=_unset):
+            if len is not self._unset:
+                self._default_len = len
+            if type_fn is not self._unset:
+                self._default_type_fn = type_fn
 
         def __call__(self, *args):
-            pass
+            args = list(args)
+            len = args.pop(0) if isinstance(args[0], int) else self._default_len
+            if len is None:
+                raise ValueError("ILayout needs a len, and no default is set.")
 
-    @staticmethod
-    def ILayout(**kwargs):
-        print("initting ILayout", kwargs)
+            fields = {}
+            for arg in args:
+                if not isinstance(arg, str):
+                    raise TypeError(f"Unknown field specifier {arg!r}.")
+                if ty := self._registered.get(arg):
+                    fields[arg] = ty
+                elif self._default_type_fn is not None:
+                    fields[arg] = self._default_type_fn(arg)
+                else:
+                    raise ValueError(
+                        f"Field specifier {arg!r} not registered, and no default type "
+                        f"function given."
+                    )
+
+            IL = StructLayout(fields)
+            IL._needs_renamed = nonmember(True)
+
+            return IL
 
 
 class RV32I(ISA):
@@ -167,7 +191,15 @@ class RV32I(ISA):
 
     with ISA.ILayouts() as il:
         il.register(opcode=Opcode, rd=Reg, rs1=Reg, rs2=Reg)
-        functn = re.compile(r"\Afunct(\d+)\Z")
-        il.default(lambda m: unsigned(int(functn.match(m)[1])))
 
-        I = il("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
+        def type_fn(m, *, functn=re.compile(r"\Afunct(\d+)\Z")):
+            return unsigned(int(functn.match(m)[1]))
+
+        il.default(len=32, type_fn=type_fn)
+
+        R = il("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
+        I = il("opcode", "rd", "funct3", "rs1", "imm")  # imm = 12
+        S = il("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
+        B = il("opcode", "imm11", "imm4_1", "funct3", "rs1", "rs2", "imm10_5", "imm12")
+        U = il("opcode", "rd", "imm")
+        J = il("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")

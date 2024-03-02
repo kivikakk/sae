@@ -433,6 +433,10 @@ class Hart(Elaboratable):
                         with m.Default():
                             self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
+                if self.isa == ISA.RVC:
+                    with m.If():
+                        pass
+
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
                     m.d.sync += self.wb_val.eq(mmu.read.value)
