@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import inspect
 
 from amaranth import Shape
@@ -128,7 +126,10 @@ class ISA:
             self.fields = {}
             consumed = 0
             for i, elem in enumerate(self._elems):
-                if not isinstance(elem, str):
+                if isinstance(elem, tuple) and len(elem) == 2:
+                    self.fields[elem[0]] = elem[1]
+                    elem = elem[0]
+                elif not isinstance(elem, str):
                     raise TypeError(f"Unknown field specifier {elem!r}.")
                 elif ty := self.annotations.get(elem, None):
                     self.fields[elem] = ty
