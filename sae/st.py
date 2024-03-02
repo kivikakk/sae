@@ -15,8 +15,9 @@ tokenize = make_tokenizer(
         TokenSpec("comment", r";.*$"),
         TokenSpec("label", r"\w+:"),
         TokenSpec("pragma", r"\.\w+(~?)"),
-        TokenSpec("offset", r"\d+\((x[0-9]|x[12][0-9]|x3[01])\)"),
-        TokenSpec("register", "x[0-9]|x[12][0-9]|x3[01]|a[0-7]"),
+        TokenSpec("offset_start", r"\d+\("),
+        TokenSpec("offset_end", r"\)"),
+        TokenSpec("register", "x[0-9]|x[12][0-9]|x3[01]|a[0-9]|ra|sp"),
         TokenSpec("word", r"[a-zA-Z][a-zA-Z0-9_.]*"),
         TokenSpec("number", r"(-\s*)?(0[xX][0-9a-fA-F_]+|0[bB][01_]+|[0-9_]+)"),
         TokenSpec("string", r"\"([^\"\\]*(\\.)?)*\""),  # untested
@@ -64,14 +65,10 @@ class Op:
     lineno: int
 
 
-import sys
-
-
 def parse_offset(p):
-    imm, rest = p.split("(")
-    imm = int(imm, 0)
-    reg = rest.rstrip(")")
-    return Offset(imm, Register(reg))
+    # p is like ("0(", "sp", ")")
+    imm = int(p[0].rstrip("("), 0)
+    return Offset(imm, Register(p[1]))
 
 
 escape_re = re.compile(r"\\.")
@@ -86,7 +83,7 @@ def parse_string(s):
 
 def parse(tokens, *, line, lineno):
     number = tok("number") >> (lambda n: int(n, 0))
-    offset = tok("offset") >> parse_offset
+    offset = (tok("offset_start") + tok("register") + tok("offset_end")) >> parse_offset
     string = tok("string") >> parse_string
 
     register = tok("register") >> Register
