@@ -304,6 +304,10 @@ class Hart(Elaboratable):
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
+                if self.isa == ISA.RVC:
+                    with m.If():
+                        pass
+
             with m.State("op.load.wait"):
                 m.next = "op.load"
             with m.State("op.load"):
