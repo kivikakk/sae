@@ -1,9 +1,13 @@
-import re
-from contextlib import contextmanager
+from __future__ import annotations
 
-from amaranth import unsigned
+import inspect
+import re
+
+from amaranth import Shape, unsigned
 from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
+
+from .rv32 import Opcode, Reg
 
 """
 
@@ -34,13 +38,20 @@ class ISA:
             if getattr(obj, "_needs_renamed", False):
                 del obj._needs_renamed
                 obj.__name__ = name
+            if getattr(obj, "_needs_finalised", False):
+                obj.finalise(cls)
 
     @staticmethod
     def RegisterSpecifier(size, names):
-        if len(names) < 2**size:
-            raise ValueError("Register naming isn't exhaustive.")
-        elif len(names) > 2**size:
-            raise ValueError("Register naming is excessive.")
+        count = 2**size
+        if len(names) < count:
+            raise ValueError(
+                f"Register naming is inadequate (named {len(names)}/{count})."
+            )
+        elif len(names) > count:
+            raise ValueError(
+                f"Register naming is excessive (named {len(names)}/{count})."
+            )
 
         members = {}
         mappings = {}
@@ -79,51 +90,74 @@ class ISA:
 
         return Register
 
-    @classmethod
-    @contextmanager
-    def ILayouts(cls):
-        yield cls.ILayoutHelper()
+    class ILayouts:
+        _needs_finalised = True
 
-    class ILayoutHelper:
-        _unset = object()
+        def __init_subclass__(cls, *, len):
+            cls.len = len
 
-        def __init__(self):
-            self._registered = {}
-            self._default_len = None
-            self._default_type_fn = None
+        @classmethod
+        def finalise(cls, isa):
+            annotations = inspect.get_annotations(
+                cls, locals=isa.__dict__, eval_str=True
+            )
+            for name, elems in cls.__dict__.items():
+                if name[0] == name[0].lower():
+                    continue
+                if isinstance(elems, str):
+                    # X = ("a") # oops!
+                    elems = (elems,)
+                il = ISA.ILayout(name, annotations, cls)
+                for elem in elems:
+                    il.append(elem)
+                setattr(cls, name, il.finalise())
 
-        def register(self, **kwargs):
-            self._registered.update(kwargs)
+    class ILayout:
+        def __init__(self, name, annotations, ils):
+            self.name = name
+            self.annotations = annotations
+            self.len = ils.len
 
-        def default(self, *, len=_unset, type_fn=_unset):
-            if len is not self._unset:
-                self._default_len = len
-            if type_fn is not self._unset:
-                self._default_type_fn = type_fn
+            self.after = None
+            self.remlen = None
 
-        def __call__(self, *args):
-            args = list(args)
-            len = args.pop(0) if isinstance(args[0], int) else self._default_len
-            if len is None:
-                raise ValueError("ILayout needs a len, and no default is set.")
+            self._ils = ils
+            self._elems = []
 
-            fields = {}
-            for arg in args:
-                if not isinstance(arg, str):
-                    raise TypeError(f"Unknown field specifier {arg!r}.")
-                if ty := self._registered.get(arg):
-                    fields[arg] = ty
-                elif self._default_type_fn is not None:
-                    fields[arg] = self._default_type_fn(arg)
+        def append(self, name):
+            self._elems.append(name)
+
+        def finalise(self):
+            self.fields = {}
+            consumed = 0
+            for i, elem in enumerate(self._elems):
+                if not isinstance(elem, str):
+                    raise TypeError(f"Unknown field specifier {elem!r}.")
+                elif ty := self.annotations.get(elem, None):
+                    self.fields[elem] = ty
+                elif hasattr(self._ils, "resolve"):
+                    self.after = self._elems[i + 1 :]
+                    self.remlen = self.len - consumed
+                    self.fields[elem] = self._ils.resolve(self, elem)
                 else:
                     raise ValueError(
-                        f"Field specifier {arg!r} not registered, and no default type "
+                        f"Field specifier {elem!r} not registered, and no default type "
                         f"function given."
                     )
 
-            IL = StructLayout(fields)
-            IL._needs_renamed = nonmember(True)
+                consumed += Shape.cast(self.fields[elem]).width
 
+            if consumed < self.len:
+                raise ValueError(
+                    f"Layout components are inadequate (fills {consumed}/{self.len})."
+                )
+            elif consumed > self.len:
+                raise ValueError(
+                    f"Layout components are excessive (fills {consumed}/{self.len})."
+                )
+
+            IL = StructLayout(self.fields)
+            IL.__name__ = self.name
             return IL
 
 
@@ -189,17 +223,38 @@ class RV32I(ISA):
         ],
     )
 
-    with ISA.ILayouts() as il:
-        il.register(opcode=Opcode, rd=Reg, rs1=Reg, rs2=Reg)
+    class IL(ISA.ILayouts, len=32):
+        opcode: Opcode
+        rd: Reg
+        rs1: Reg
+        rs2: Reg
 
-        def type_fn(m, *, functn=re.compile(r"\Afunct(\d+)\Z")):
-            return unsigned(int(functn.match(m)[1]))
+        # TODO: make a helper to stitch together multiple imm(\d+(_\d+)?) automagically.
+        def resolve(
+            il,
+            name,
+            *,
+            functn=re.compile(r"\Afunct(\d+)\Z"),
+            immsingle=re.compile(r"\Aimm(\d+)\Z"),
+            immmulti=re.compile(r"\Aimm(\d+)_(\d+)\Z"),
+        ):
+            if m := functn.match(name):
+                return unsigned(int(m[1]))
+            if name == "imm":
+                assert il.after == [], "don't know how to deal with non-last imm"
+                return unsigned(il.remlen)
+            if m := immmulti.match(name):
+                top = int(m[1])
+                bottom = int(m[2])
+                assert top > bottom, "immY_X format maps to imm[Y:X], Y must be > X"
+                return unsigned(top - bottom + 1)
+            if m := immsingle.match(name):
+                return unsigned(1)
+            assert False, f"unhandled: {name!r}"
 
-        il.default(len=32, type_fn=type_fn)
-
-        R = il("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
-        I = il("opcode", "rd", "funct3", "rs1", "imm")  # imm = 12
-        S = il("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
-        B = il("opcode", "imm11", "imm4_1", "funct3", "rs1", "rs2", "imm10_5", "imm12")
-        U = il("opcode", "rd", "imm")
-        J = il("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
+        R = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
+        I = ("opcode", "rd", "funct3", "rs1", "imm")
+        S = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
+        B = ("opcode", "imm11", "imm4_1", "funct3", "rs1", "rs2", "imm10_5", "imm12")
+        U = ("opcode", "rd", "imm")
+        J = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")

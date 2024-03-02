@@ -12,14 +12,12 @@ class TestISARegs(unittest.TestCase):
         self.assertEqual(["ZERO", "X0"], x0.aliases)
         self.assertIs(x0, RV32I.Reg("Zero"))
 
-    def test_exhaustive(self):
-        with self.assertRaisesRegex(
-            ValueError, r"^Register naming isn't exhaustive\.$"
-        ):
+    def test_inadequate(self):
+        with self.assertRaisesRegex(ValueError, r"^Register naming is inadequate \(named 3/4\)\.$"):
             ISA.RegisterSpecifier(2, ["a", "b", "c"])
 
     def test_excessive(self):
-        with self.assertRaisesRegex(ValueError, r"^Register naming is excessive\.$"):
+        with self.assertRaisesRegex(ValueError, r"^Register naming is excessive \(named 3/2\)\.$"):
             ISA.RegisterSpecifier(1, ["a", "b", "c"])
 
     def test_wonky(self):
@@ -29,27 +27,47 @@ class TestISARegs(unittest.TestCase):
 
 class TestISAILayouts(unittest.TestCase):
     def test_base(self):
-        self.assertEqual("I", RV32I.I.__name__)
-
-        self.assertEqual(32, RV32I.I.size)
-
-    def test_no_len(self):
-        with self.assertRaisesRegex(
-            ValueError, r"^ILayout needs a len, and no default is set\.$"
-        ):
-            with ISA.ILayouts() as il:
-                il("xyz")
+        self.assertEqual("R", RV32I.IL.R.__name__)
+        self.assertEqual(32, RV32I.IL.R.size)
 
     def test_bad_field(self):
-        with self.assertRaisesRegex(TypeError, r"^Unknown field specifier 2\.$"):
-            with ISA.ILayouts() as il:
-                il(1, 2)
+        with self.assertRaisesRegex(TypeError, r"^Unknown field specifier 1\.$"):
+
+            class I(ISA):
+                class IL(ISA.ILayouts, len=1):
+                    X = (1, 2)
 
     def test_unregistered(self):
         with self.assertRaisesRegex(
             ValueError,
             r"^Field specifier 'abc' not registered, and no default type function given\.$",
         ):
-            with ISA.ILayouts() as il:
-                il.default(len=1)
-                il("abc")
+
+            class I(ISA):
+                class IL(ISA.ILayouts, len=1):
+                    X = "abc"
+
+    def test_inadequate(self):
+        with self.assertRaisesRegex(
+            ValueError, r"^Layout components are inadequate \(fills 7/8\)\.$"
+        ):
+
+            class I(ISA):
+                class IL(ISA.ILayouts, len=8):
+                    sh1: 4
+                    sh2: 3
+
+                    X = ("sh1", "sh2")
+
+    def test_excessive(self):
+        with self.assertRaisesRegex(
+            ValueError, r"^Layout components are excessive \(fills 12/8\)\.$"
+        ):
+
+            class I(ISA):
+                class IL(ISA.ILayouts, len=8):
+                    sh1: 4
+                    sh2: 4
+                    sh3: 4
+
+                    X = ("sh1", "sh2", "sh3")
