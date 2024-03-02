@@ -1,6 +1,7 @@
 import unittest
 
-from .isa import ISA, RV32I
+from .isa import ISA
+from .isa_rv32 import RV32I
 
 
 class TestISARegs(unittest.TestCase):
@@ -13,11 +14,15 @@ class TestISARegs(unittest.TestCase):
         self.assertIs(x0, RV32I.Reg("Zero"))
 
     def test_inadequate(self):
-        with self.assertRaisesRegex(ValueError, r"^Register naming is inadequate \(named 3/4\)\.$"):
+        with self.assertRaisesRegex(
+            ValueError, r"^Register naming is inadequate \(named 3/4\)\.$"
+        ):
             ISA.RegisterSpecifier(2, ["a", "b", "c"])
 
     def test_excessive(self):
-        with self.assertRaisesRegex(ValueError, r"^Register naming is excessive \(named 3/2\)\.$"):
+        with self.assertRaisesRegex(
+            ValueError, r"^Register naming is excessive \(named 3/2\)\.$"
+        ):
             ISA.RegisterSpecifier(1, ["a", "b", "c"])
 
     def test_wonky(self):
