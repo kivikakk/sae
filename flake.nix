@@ -27,6 +27,8 @@
         nativeBuildInputs = [python.pkgs.funcparserlib];
       };
 
-      devShells = packages.default.devShells;
+      devShells = packages.default.devShells // {
+        lluvia = pkgs.pkgsCross.riscv32-embedded.mkShell {};
+      };
     });
 }

@@ -204,7 +204,8 @@ class Hart(Elaboratable):
                     m.d.comb += v_sxi.eq(v_i.imm.as_signed())
 
                     # set pc/next before processing opcode so they can be
-                    # overridden, set x0 after so it remains zero (lol).
+                    # overridden if necessary, set x0 after so it remains zero
+                    # (lol).
                     m.next = "fetch.init"
                     m.d.sync += self.pc.eq(self.pc + 4)
 
