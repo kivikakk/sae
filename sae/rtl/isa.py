@@ -21,7 +21,7 @@ It encompasses:
 
 TODO
 
-* We could also use __init_subclass__ to bind registers to the ISA they were
+* We could also use __init_subclass__ to bind registers/ILs to the ISA they were
   created in!
 
 """
@@ -29,7 +29,7 @@ TODO
 
 class ISA:
     def __init_subclass__(cls):
-        for name, obj in cls.__dict__.items():
+        for name, obj in cls.__dict__.copy().items():
             if getattr(obj, "_needs_renamed", False):
                 del obj._needs_renamed
                 obj.__name__ = name
@@ -93,19 +93,29 @@ class ISA:
 
         @classmethod
         def finalise(cls, isa):
-            annotations = inspect.get_annotations(
-                cls, locals=isa.__dict__, eval_str=True
-            )
+            context = {}
+            for klass in reversed(isa.mro()):
+                context.update(
+                    {k: v for k, v in klass.__dict__.items() if not k.startswith("_")}
+                )
+            annotations = inspect.get_annotations(cls, locals=context, eval_str=True)
             for name, elems in cls.__dict__.items():
                 if name[0] == name[0].lower():
                     continue
-                if isinstance(elems, str):
-                    # X = ("a") # oops!
-                    elems = (elems,)
+                if not isinstance(elems, tuple):
+                    raise TypeError(
+                        f"Expected tuple for '{isa.__module__}.{isa.__qualname__}.{name}', "
+                        f"not {type(elems).__name__}."
+                    )
                 il = ISA.ILayout(name, annotations, cls)
                 for elem in elems:
                     il.append(elem)
-                setattr(cls, name, il.finalise())
+                if hasattr(isa, name):
+                    raise ValueError(
+                        f"'{isa.__module__}.{isa.__qualname__}' already "
+                        f"has a member named '{name}'."
+                    )
+                setattr(isa, name, il.finalise())
 
     class ILayout:
         def __init__(self, name, annotations, ils):
