@@ -1,5 +1,8 @@
 import unittest
 
+from amaranth import Shape, unsigned
+from amaranth.lib.data import StructLayout
+
 from .isa import ISA
 from .isa_rv32 import RV32I, RV32IC
 
@@ -30,18 +33,30 @@ class TestISARegs(unittest.TestCase):
             ISA.RegisterSpecifier(1, ["a", []])
 
 
-class TestISAILayouts(unittest.TestCase):
+class TestISAILayout(unittest.TestCase):
     def test_base(self):
         self.assertEqual("R", RV32I.R.__name__)
-        self.assertEqual(32, RV32I.R.size)
-        self.assertEqual(("opcode", "rd", "imm"), RV32I.IL.U)
+        self.assertEqual(
+            StructLayout(
+                {
+                    "opcode": RV32I.Opcode,
+                    "rd": RV32I.Reg,
+                    "funct3": unsigned(3),
+                    "rs1": RV32I.Reg,
+                    "imm": unsigned(12),
+                }
+            ),
+            RV32I.I.shape,
+        )
+        self.assertEqual(unsigned(32), Shape.cast(RV32I.R))
+        self.assertEqual(("opcode", "rd", "imm"), RV32I.U.layout)
 
     def test_bad_field(self):
         with self.assertRaisesRegex(TypeError, r"^Unknown field specifier 1\.$"):
 
             class I(ISA):
-                class IL(ISA.ILayouts, len=1):
-                    X = (1, 2)
+                class IL(ISA.ILayout, len=1):
+                    layout = (1, 2)
 
     def test_bad_tuple(self):
         with self.assertRaisesRegex(
@@ -49,18 +64,18 @@ class TestISAILayouts(unittest.TestCase):
         ):
 
             class I(ISA):
-                class IL(ISA.ILayouts, len=1):
-                    X = "abc"  # Should be ("abc",)
+                class X(ISA.ILayout, len=1):
+                    layout = "abc"  # i.e. ("abc") typed instead of ("abc",)
 
     def test_unregistered(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^Field specifier 'abc' not registered, and no default type function given\.$",
+            r"^Field specifier 'abc' not registered, and no 'resolve' implementation available\.$",
         ):
 
             class I(ISA):
-                class IL(ISA.ILayouts, len=1):
-                    X = ("abc",)
+                class X(ISA.ILayout, len=1):
+                    layout = ("abc",)
 
     def test_inadequate(self):
         with self.assertRaisesRegex(
@@ -68,11 +83,11 @@ class TestISAILayouts(unittest.TestCase):
         ):
 
             class I(ISA):
-                class IL(ISA.ILayouts, len=8):
+                class X(ISA.ILayout, len=8):
                     sh1: 4
                     sh2: 3
 
-                    X = ("sh1", "sh2")
+                    layout = ("sh1", "sh2")
 
     def test_excessive(self):
         with self.assertRaisesRegex(
@@ -80,27 +95,16 @@ class TestISAILayouts(unittest.TestCase):
         ):
 
             class I(ISA):
-                class IL(ISA.ILayouts, len=8):
+                class X(ISA.ILayout, len=8):
                     sh1: 4
                     sh2: 4
                     sh3: 4
 
-                    X = ("sh1", "sh2", "sh3")
-
-    def test_clash(self):
-        with self.assertRaisesRegex(
-            ValueError, r"^'sae\.rtl\.test_[^']+\.I' already has a member named 'X'\.$"
-        ):
-
-            class I(ISA):
-                X = 1
-
-                class IL(ISA.ILayouts, len=1):
-                    X = ("x", 1)
+                    layout = ("sh1", "sh2", "sh3")
 
 
 class TestISAInheritance(unittest.TestCase):
     def test_base(self):
         self.assertIs(RV32I.Reg, RV32IC.Reg)
-        self.assertIs(RV32I.Reg, RV32IC.CR["rs2"].shape)
+        self.assertIs(RV32I.Reg, RV32IC.CR.shape["rs2"].shape)
         self.assertIs(RV32I.I, RV32IC.I)

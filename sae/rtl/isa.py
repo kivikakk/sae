@@ -1,6 +1,6 @@
 import inspect
 
-from amaranth import Shape
+from amaranth import Shape, ShapeCastable
 from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
@@ -85,11 +85,37 @@ class ISA:
 
         return Register
 
-    class ILayouts:
-        _needs_finalised = True
+    class ILayoutMeta(ShapeCastable, type):
+        def as_shape(cls):
+            return cls.shape.as_shape()
 
-        def __init_subclass__(cls, *, len):
-            cls.len = len
+        def const(cls, obj):
+            return cls.shape.const(obj)
+
+        def __call__(cls, obj):
+            return cls.shape(obj)
+
+    class ILayout(metaclass=ILayoutMeta):
+        def __init_subclass__(cls, *, len=None):
+            if len is not None:
+                cls.len = len
+            if not hasattr(cls, "layout"):
+                # Base class, not a complete instruction layout.
+                return
+
+            if getattr(cls, "len", None) is None:
+                raise ValueError(
+                    f"'{cls.__module__}.{cls.__qualname__}' missing len, and no default given."
+                )
+
+            cls._needs_finalised = True
+
+        @classmethod
+        def resolve(cls, name, *args, **kwargs):
+            raise ValueError(
+                f"Field specifier {name!r} not registered, and "
+                f"no 'resolve' implementation available."
+            )
 
         @classmethod
         def finalise(cls, isa):
@@ -98,72 +124,47 @@ class ISA:
                 context.update(
                     {k: v for k, v in klass.__dict__.items() if not k.startswith("_")}
                 )
-            annotations = inspect.get_annotations(cls, locals=context, eval_str=True)
-            for name, elems in cls.__dict__.items():
-                if name[0] == name[0].lower():
-                    continue
-                if not isinstance(elems, tuple):
-                    raise TypeError(
-                        f"Expected tuple for '{isa.__module__}.{isa.__qualname__}.{name}', "
-                        f"not {type(elems).__name__}."
-                    )
-                il = ISA.ILayout(name, annotations, cls)
-                for elem in elems:
-                    il.append(elem)
-                if hasattr(isa, name):
-                    raise ValueError(
-                        f"'{isa.__module__}.{isa.__qualname__}' already "
-                        f"has a member named '{name}'."
-                    )
-                setattr(isa, name, il.finalise())
 
-    class ILayout:
-        def __init__(self, name, annotations, ils):
-            self.name = name
-            self.annotations = annotations
-            self.len = ils.len
+            mro = list(reversed(cls.mro()))
+            annotations = {}
+            for klass in mro[mro.index(ISA.ILayout) + 1 :]:
+                annotations.update(
+                    inspect.get_annotations(klass, locals=context, eval_str=True)
+                )
 
-            self.after = None
-            self.remlen = None
+            assert hasattr(cls, "layout"), "finalising a non-leaf ILayout"
 
-            self._ils = ils
-            self._elems = []
+            if not isinstance(cls.layout, tuple):
+                raise TypeError(
+                    f"Expected tuple for '{cls.__module__}.{cls.__qualname__}', "
+                    f"not {type(cls.layout).__name__}."
+                )
 
-        def append(self, name):
-            self._elems.append(name)
-
-        def finalise(self):
-            self.fields = {}
+            fields = {}
             consumed = 0
-            for i, elem in enumerate(self._elems):
+            for i, elem in enumerate(cls.layout):
                 if isinstance(elem, tuple) and len(elem) == 2:
-                    self.fields[elem[0]] = elem[1]
+                    fields[elem[0]] = elem[1]
                     elem = elem[0]
                 elif not isinstance(elem, str):
                     raise TypeError(f"Unknown field specifier {elem!r}.")
-                elif ty := self.annotations.get(elem, None):
-                    self.fields[elem] = ty
-                elif hasattr(self._ils, "resolve"):
-                    self.after = self._elems[i + 1 :]
-                    self.remlen = self.len - consumed
-                    self.fields[elem] = self._ils.resolve(self, elem)
+                elif ty := annotations.get(elem, None):
+                    fields[elem] = ty
                 else:
-                    raise ValueError(
-                        f"Field specifier {elem!r} not registered, and no default type "
-                        f"function given."
-                    )
+                    after = cls.layout[i + 1 :]
+                    remlen = cls.len - consumed
+                    fields[elem] = cls.resolve(elem, after=after, remlen=remlen)
 
-                consumed += Shape.cast(self.fields[elem]).width
+                consumed += Shape.cast(fields[elem]).width
 
-            if consumed < self.len:
+            if consumed < cls.len:
                 raise ValueError(
-                    f"Layout components are inadequate (fills {consumed}/{self.len})."
+                    f"Layout components are inadequate (fills {consumed}/{cls.len})."
                 )
-            elif consumed > self.len:
+            elif consumed > cls.len:
                 raise ValueError(
-                    f"Layout components are excessive (fills {consumed}/{self.len})."
+                    f"Layout components are excessive (fills {consumed}/{cls.len})."
                 )
 
-            IL = StructLayout(self.fields)
-            IL.__name__ = self.name
-            return IL
+            cls.shape = StructLayout(fields)
+            cls.shape.__name__ = cls.__name__
