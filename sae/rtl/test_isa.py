@@ -1,7 +1,7 @@
 import unittest
 
 from .isa import ISA
-from .isa_rv32 import RV32I
+from .isa_rv32 import RV32I, RV32IC
 
 
 class TestISARegs(unittest.TestCase):
@@ -32,8 +32,9 @@ class TestISARegs(unittest.TestCase):
 
 class TestISAILayouts(unittest.TestCase):
     def test_base(self):
-        self.assertEqual("R", RV32I.IL.R.__name__)
-        self.assertEqual(32, RV32I.IL.R.size)
+        self.assertEqual("R", RV32I.R.__name__)
+        self.assertEqual(32, RV32I.R.size)
+        self.assertEqual(("opcode", "rd", "imm"), RV32I.IL.U)
 
     def test_bad_field(self):
         with self.assertRaisesRegex(TypeError, r"^Unknown field specifier 1\.$"):
@@ -41,6 +42,15 @@ class TestISAILayouts(unittest.TestCase):
             class I(ISA):
                 class IL(ISA.ILayouts, len=1):
                     X = (1, 2)
+
+    def test_bad_tuple(self):
+        with self.assertRaisesRegex(
+            TypeError, r"^Expected tuple for 'sae.rtl.test_[^']+\.I\.X', not str\.$"
+        ):
+
+            class I(ISA):
+                class IL(ISA.ILayouts, len=1):
+                    X = "abc"  # Should be ("abc",)
 
     def test_unregistered(self):
         with self.assertRaisesRegex(
@@ -50,7 +60,7 @@ class TestISAILayouts(unittest.TestCase):
 
             class I(ISA):
                 class IL(ISA.ILayouts, len=1):
-                    X = "abc"
+                    X = ("abc",)
 
     def test_inadequate(self):
         with self.assertRaisesRegex(
@@ -76,3 +86,21 @@ class TestISAILayouts(unittest.TestCase):
                     sh3: 4
 
                     X = ("sh1", "sh2", "sh3")
+
+    def test_clash(self):
+        with self.assertRaisesRegex(
+            ValueError, r"^'sae\.rtl\.test_[^']+\.I' already has a member named 'X'\.$"
+        ):
+
+            class I(ISA):
+                X = 1
+
+                class IL(ISA.ILayouts, len=1):
+                    X = ("x", 1)
+
+
+class TestISAInheritance(unittest.TestCase):
+    def test_base(self):
+        self.assertIs(RV32I.Reg, RV32IC.Reg)
+        self.assertIs(RV32I.Reg, RV32IC.CR["rs2"].shape)
+        self.assertIs(RV32I.I, RV32IC.I)

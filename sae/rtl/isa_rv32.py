@@ -6,7 +6,6 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .isa import ISA
-from .rv32 import Opcode, Reg
 
 __all__ = ["RV32I", "RV32IC"]
 
