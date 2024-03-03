@@ -72,7 +72,7 @@ class RV32I(ISA):
         ],
     )
 
-    class IL(ISA.ILayouts, len=32):
+    class IL(ISA.ILayout, len=32):
         opcode: Opcode
         rd: Reg
         rs1: Reg
@@ -80,9 +80,10 @@ class RV32I(ISA):
 
         # TODO: make a helper to stitch together multiple imm(\d+(_\d+)?) automagically.
         def resolve(
-            il,
             name,
             *,
+            after,
+            remlen,
             functn=re.compile(r"\Afunct(\d+)\Z"),
             immsingle=re.compile(r"\Aimm(\d+)\Z"),
             immmulti=re.compile(r"\Aimm(\d+)_(\d+)\Z"),
@@ -90,8 +91,8 @@ class RV32I(ISA):
             if m := functn.match(name):
                 return unsigned(int(m[1]))
             if name == "imm":
-                assert il.after == [], "don't know how to deal with non-last imm"
-                return unsigned(il.remlen)
+                assert not after, "don't know how to deal with non-last imm"
+                return unsigned(remlen)
             if m := immmulti.match(name):
                 top = int(m[1])
                 bottom = int(m[2])
@@ -101,12 +102,32 @@ class RV32I(ISA):
                 return unsigned(1)
             assert False, f"unhandled: {name!r}"
 
-        R = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
-        I = ("opcode", "rd", "funct3", "rs1", "imm")
-        S = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
-        B = ("opcode", "imm11", "imm4_1", "funct3", "rs1", "rs2", "imm10_5", "imm12")
-        U = ("opcode", "rd", "imm")
-        J = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
+    class R(IL):
+        layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
+
+    class I(IL):
+        layout = ("opcode", "rd", "funct3", "rs1", "imm")
+
+    class S(IL):
+        layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
+
+    class B(IL):
+        layout = (
+            "opcode",
+            "imm11",
+            "imm4_1",
+            "funct3",
+            "rs1",
+            "rs2",
+            "imm10_5",
+            "imm12",
+        )
+
+    class U(IL):
+        layout = ("opcode", "rd", "imm")
+
+    class J(IL):
+        layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
 
 
 class RV32IC(RV32I):
@@ -129,7 +150,7 @@ class RV32IC(RV32I):
         ],
     )
 
-    class IL(ISA.ILayouts, len=16):
+    class IL(ISA.ILayout, len=16):
         op: Op
         rs2: Reg
         rdrs1: Reg
@@ -137,24 +158,42 @@ class RV32IC(RV32I):
         rs1_: Reg_
         rs2_: Reg_
         rd_rs1_: Reg_
-        jump_target: unsigned(11)
 
         def resolve(
-            il,
             name,
             *,
             functn=re.compile(r"\Afunct(\d+)\Z"),
+            **_,
         ):
             if m := functn.match(name):
                 return unsigned(int(m[1]))
             assert False, f"unhandled: {name!r}"
 
-        CR = ("op", "rs2", "rdrs1", "funct4")
-        CI = ("op", ("imm", 5), "rdrs1", ("imm2", 1), "funct3")
-        CSS = ("op", "rs2", ("imm", 6), "funct3")
-        CIW = ("op", "rd_", ("imm", 8), "funct3")
-        CL = ("op", "rd_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
-        CS = ("op", "rs2_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
-        CA = ("op", "rs2_", "funct2", "rd_rs1_", "funct6")
-        CB = ("op", ("offset", 5), "rs1_", ("offset2", 3), "funct3")
-        CJ = ("op", "jump_target", "funct3")
+    class CR(IL):
+        layout = ("op", "rs2", "rdrs1", "funct4")
+
+    class CI(IL):
+        layout = ("op", ("imm", 5), "rdrs1", ("imm2", 1), "funct3")
+
+    class CSS(IL):
+        layout = ("op", "rs2", ("imm", 6), "funct3")
+
+    class CIW(IL):
+        layout = ("op", "rd_", ("imm", 8), "funct3")
+
+    class CL(IL):
+        layout = ("op", "rd_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
+
+    class CS(IL):
+        layout = ("op", "rs2_", ("imm", 2), "rs1_", ("imm2", 3), "funct3")
+
+    class CA(IL):
+        layout = ("op", "rs2_", "funct2", "rd_rs1_", "funct6")
+
+    class CB(IL):
+        layout = ("op", ("offset", 5), "rs1_", ("offset2", 3), "funct3")
+
+    class CJ(IL):
+        jump_target: unsigned(11)
+
+        layout = ("op", "jump_target", "funct3")
