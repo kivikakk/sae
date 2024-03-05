@@ -155,11 +155,19 @@ class TestISAInsns(unittest.TestCase):
         )
         self.assertEqual(
             0x4000_50B3,
-            RV32I.SRA(rd=RV32I.Reg("x1"), rs1=RV32I.Reg("x0"), rs2=RV32I.Reg("x0")),
+            RV32I.SRA(rd="x1", rs1=("x0"), rs2=("x0")),
+        )
+        self.assertEqual(
+            0x40A5_D513,
+            RV32I.SRAI(rd="a0", rs1="a1", shamt=0b01010),
         )
         self.assertEqual(
             0x0000_8067,
             RV32I.RET(),
+        )
+        self.assertEqual(
+            0x0000_0503,
+            RV32I.LB(rd="a0", rs1off=(0, "x0"))
         )
 
     def test_call_nonleaf(self):

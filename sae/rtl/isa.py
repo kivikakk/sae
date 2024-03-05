@@ -1,4 +1,5 @@
 import inspect
+from functools import reduce, wraps
 
 from amaranth import Shape
 from amaranth.lib.data import StructLayout
@@ -192,7 +193,7 @@ class ISA(metaclass=ISAMeta):
                 case _:
                     assert False, (
                         f"unhandled resolving '{cls.__fullname__}': "
-                        f"{name!r}={value!r} (fields={fields!r})"
+                        f"{name!r}={value!r} (fields={cls._fields!r})"
                     )
 
         def resolve_values(cls, values):
@@ -204,11 +205,12 @@ class ISA(metaclass=ISAMeta):
         pass
 
     class IThunk:
-        def __init__(self, ilcls, kwargs):
+        def __init__(self, ilcls, kwargs, *, xfrms=None):
             self.ilcls = ilcls
             self.kwargs = kwargs
             self._needs_named = True
             self.__fullname__ = f"{ilcls.__fullname__} child"
+            self.xfrms = xfrms or []
 
             for name in kwargs:
                 if name not in ilcls.layout:
@@ -223,6 +225,8 @@ class ISA(metaclass=ISAMeta):
                     )
 
         def __call__(self, **kwargs):
+            kwargs = reduce(lambda kwargs, f: f(kwargs), self.xfrms, kwargs)
+
             for name in kwargs:
                 if name not in self.ilcls.layout:
                     raise ValueError(
@@ -255,6 +259,31 @@ class ISA(metaclass=ISAMeta):
 
             return self.ilcls.shape.const(args).as_value().value
 
+        def clone(self):
+            return ISA.IThunk(self.ilcls, self.kwargs.copy(), xfrms=self.xfrms.copy())
+
         def partial(self, **kwargs):
             # Note that overwriting defaults is allowed in partial().
-            return ISA.IThunk(self.ilcls, {**self.kwargs, **kwargs})
+            clone = self.clone()
+            clone.kwargs.update(kwargs)
+            return clone
+
+        def xfrm(self, xfn):
+            # I wonder if we'll ever want to .xfrm().partial(...)?
+            clone = self.clone()
+
+            parameters = inspect.signature(xfn).parameters
+
+            @wraps(xfn)
+            def pipe(kwargs):
+                args = {}
+                for name, p in parameters.items():
+                    if p.default is p.empty:
+                        args[name] = kwargs.pop(name)
+                    else:
+                        args[name] = kwargs.pop(name, p.default)
+                kwargs.update(xfn(**args))
+                return kwargs
+
+            clone.xfrms.append(pipe)
+            return clone
