@@ -1,6 +1,6 @@
 import inspect
 
-from amaranth import Shape, ShapeCastable
+from amaranth import Shape
 from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
@@ -21,21 +21,26 @@ It encompasses:
 
 TODO
 
-* We could also use __init_subclass__ to bind registers/ILs to the ISA they were
-  created in!
+* We could also bind registers/ILs to the ISA they were created in!
 
 """
 
 
-class ISA:
-    def __init_subclass__(cls):
-        for name, obj in cls.__dict__.copy().items():
-            if getattr(obj, "_needs_renamed", False):
-                del obj._needs_renamed
+class ISAMeta(type):
+    def __new__(mcls, name, bases, namespace):
+        cls = type.__new__(mcls, name, bases, namespace)
+        for name in [*cls.__dict__]:
+            obj = cls.__dict__[name]
+            if getattr(obj, "_needs_named", False):
+                del obj._needs_named
                 obj.__name__ = name
+                obj.__fullname__ = f"{cls.__module__}.{cls.__qualname__}.{name}"
             if getattr(obj, "_needs_finalised", False):
                 obj.finalise(cls)
+        return cls
 
+
+class ISA(metaclass=ISAMeta):
     @staticmethod
     def RegisterSpecifier(size, names):
         count = 2**size
@@ -68,7 +73,7 @@ class ISA:
 
             _mappings = nonmember(mappings)
             _aliases = nonmember(aliases_)
-            _needs_renamed = nonmember(True)
+            _needs_named = nonmember(True)
 
             @classmethod
             def _missing_(cls, value):
@@ -85,29 +90,54 @@ class ISA:
 
         return Register
 
-    class ILayout:
-        def __init_subclass__(cls, *, len=None):
+    class ILayoutMeta(type):
+        def __new__(mcls, name, bases, namespace, len=None):
+            cls = type.__new__(mcls, name, bases, namespace)
+
             if len is not None:
                 cls.len = len
+
             if not hasattr(cls, "layout"):
                 # Base class, not a complete instruction layout.
-                return
+                return cls
+            cls._needs_finalised = True
 
             if getattr(cls, "len", None) is None:
                 raise ValueError(
-                    f"'{cls.__module__}.{cls.__qualname__}' missing len, and no default given."
+                    f"'{cls.__fullname__}' missing len, and no default given."
                 )
 
-            cls._needs_finalised = True
+            return cls
 
-        @classmethod
+        def __call__(cls, **kwargs):
+            # Can't check for "shape" because this ain't finalised yet.
+            if not hasattr(cls, "layout"):
+                raise TypeError(f"'{cls.__fullname__}' called, but it's layoutless.")
+
+            for name in kwargs:
+                if name not in cls.layout:
+                    raise ValueError(
+                        f"'{cls.__fullname__}' called with argument "
+                        f"{name!r}, which is not part of its layout."
+                    )
+                if name in cls.values:
+                    raise ValueError(
+                        f"{name!r} is already defined for '{cls.__fullname__}' "
+                        f"and cannot be overridden."
+                    )
+
+            return ISA.IThunk(cls, kwargs)
+
+        @property
+        def __fullname__(self):
+            return f"{self.__module__}.{self.__qualname__}"
+
         def resolve(cls, name, *args, **kwargs):
             raise ValueError(
                 f"Field specifier {name!r} not registered, and "
                 f"no 'resolve' implementation available."
             )
 
-        @classmethod
         def finalise(cls, isa):
             context = {}
             for klass in reversed(isa.mro()):
@@ -126,7 +156,7 @@ class ISA:
 
             if not isinstance(cls.layout, tuple):
                 raise TypeError(
-                    f"Expected tuple for '{cls.__module__}.{cls.__qualname__}', "
+                    f"Expected tuple for '{cls.__fullname__}', "
                     f"not {type(cls.layout).__name__}."
                 )
 
@@ -137,7 +167,9 @@ class ISA:
                     fields[elem[0]] = elem[1]
                     elem = elem[0]
                 elif not isinstance(elem, str):
-                    raise TypeError(f"Unknown field specifier {elem!r}.")
+                    raise TypeError(
+                        f"Unknown field specifier {elem!r} in layout of '{cls.__fullname__}'."
+                    )
                 elif ty := annotations.get(elem, None):
                     fields[elem] = ty
                 else:
@@ -158,3 +190,71 @@ class ISA:
 
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
+
+            cls.values = {
+                name: cls.resolve_value(fields, name, value)
+                for name, value in getattr(cls, "values", {}).items()
+            }
+
+            cls.defaults = {
+                name: cls.resolve_value(fields, name, value)
+                for name, value in getattr(cls, "defaults", {}).items()
+            }
+
+            overlap = []
+            for name in cls.layout:
+                if name in cls.values and name in cls.defaults:
+                    overlap.append(name)
+            if overlap:
+                raise ValueError(
+                    f"'{cls.__fullname__}' sets the following in both "
+                    f"'values' and 'defaults': {overlap!r}."
+                )
+
+        def resolve_value(cls, fields, name, value):
+            match value:
+                case int():
+                    return value
+                case str():
+                    try:
+                        return fields[name][value]
+                    except Exception as e:
+                        raise TypeError(
+                            f"Cannot resolve default value for element of '{cls.__fullname__}': "
+                            f"{name!r}={value!r}."
+                        ) from e
+                case _:
+                    assert False, f"unhandled: {value!r}"
+
+    class ILayout(metaclass=ILayoutMeta):
+        pass
+
+    class IThunk:
+        def __init__(self, ilcls, kwargs):
+            self.ilcls = ilcls
+            self.kwargs = kwargs
+            self._needs_named = True
+
+        def __call__(self, **kwargs):
+            for name in kwargs:
+                if name not in self.ilcls.layout:
+                    raise ValueError(
+                        f"'{self.ilcls.__fullname__}' called with argument "
+                        f"{name!r}, which is not part of its IL's layout."
+                    )
+                if name in self.ilcls.values or name in self.kwargs:
+                    raise ValueError(
+                        f"{name!r} is already defined for '{self.ilcls.__fullname__}' "
+                        f"and cannot be overridden in thunk."
+                    )
+            args = {**self.ilcls.values, **self.ilcls.defaults, **self.kwargs, **kwargs}
+            if len(args) < len(self.ilcls.layout):
+                missing = list(self.ilcls.layout)
+                for name in args:
+                    missing.remove(name)
+                raise TypeError(
+                    f"'{self.__fullname__}' called without supplying "
+                    f"values for arguments: {missing!r}."
+                )
+
+            return self.ilcls.shape.const(args).as_value().value

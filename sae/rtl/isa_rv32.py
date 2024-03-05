@@ -104,6 +104,31 @@ class RV32I(ISA):
 
     class R(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
+        values = {"opcode": "OP"}
+        defaults = {"funct7": 0}
+
+        class Funct(IntEnum, shape=3):
+            ADDSUB = 0b000
+            SLT = 0b010
+            SLTU = 0b011
+            AND = 0b111
+            OR = 0b110
+            XOR = 0b100
+            SLL = 0b001
+            SR = 0b101
+
+        F7Negate = 0b0100000
+
+    ADD = R(funct3=R.Funct.ADDSUB)
+    SLT = R(funct3=R.Funct.SLT)
+    SLTU = R(funct3=R.Funct.SLTU)
+    AND = R(funct3=R.Funct.AND)
+    OR = R(funct3=R.Funct.OR)
+    XOR = R(funct3=R.Funct.XOR)
+    SLL = R(funct3=R.Funct.SLL)
+    SRL = R(funct3=R.Funct.SR)
+    SUB = R(funct3=R.Funct.ADDSUB, funct7=R.F7Negate)
+    SRA = R(funct3=R.Funct.SR, funct7=R.F7Negate)
 
     class I(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "imm")
