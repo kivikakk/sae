@@ -4,52 +4,6 @@ from amaranth import Shape
 from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
-"""
-
-What is an ISA?
-
-It encompasses:
-
-* Instruction layouts.
-  * Each layout has a common field, the opcode.
-* Instructions encoded using those layouts.
-
-
-TODO
-
-* We could also bind registers/ILs to the ISA they were created in!
-
-"""
-
-
-def resolve_value(cls, fields, name, value):
-    match value:
-        case int():
-            return value
-        case str():
-            try:
-                field = fields[name]
-                try:
-                    return field[value]
-                except KeyError:
-                    return field(value)
-            except Exception as e:
-                raise TypeError(
-                    f"Cannot resolve default value for element of '{cls.__fullname__}': "
-                    f"{name!r}={value!r}."
-                ) from e
-        case _:
-            assert False, (
-                f"unhandled resolving '{cls.__fullname__}': "
-                f"{name!r}={value!r} (fields={fields!r})"
-            )
-
-
-def resolve_values(cls, fields, values):
-    return {
-        name: resolve_value(cls, fields, name, value) for name, value in values.items()
-    }
-
 
 class ISAMeta(type):
     def __new__(mcls, name, bases, namespace):
@@ -206,8 +160,8 @@ class ISA(metaclass=ISAMeta):
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
 
-            cls.values = resolve_values(cls, fields, getattr(cls, "values", {}))
-            cls.defaults = resolve_values(cls, fields, getattr(cls, "defaults", {}))
+            cls.values = cls.resolve_values(getattr(cls, "values", {}))
+            cls.defaults = cls.resolve_values(getattr(cls, "defaults", {}))
 
             overlap = []
             for name in cls.layout:
@@ -218,6 +172,33 @@ class ISA(metaclass=ISAMeta):
                     f"'{cls.__fullname__}' sets the following in both "
                     f"'values' and 'defaults': {overlap!r}."
                 )
+
+        def resolve_value(cls, name, value):
+            match value:
+                case int():
+                    return value
+                case str():
+                    try:
+                        field = cls._fields[name]
+                        try:
+                            return field[value]
+                        except KeyError:
+                            return field(value)
+                    except Exception as e:
+                        raise TypeError(
+                            f"Cannot resolve default value for element of '{cls.__fullname__}': "
+                            f"{name!r}={value!r}."
+                        ) from e
+                case _:
+                    assert False, (
+                        f"unhandled resolving '{cls.__fullname__}': "
+                        f"{name!r}={value!r} (fields={fields!r})"
+                    )
+
+        def resolve_values(cls, values):
+            return {
+                name: cls.resolve_value(name, value) for name, value in values.items()
+            }
 
     class ILayout(metaclass=ILayoutMeta):
         pass
@@ -260,8 +241,8 @@ class ISA(metaclass=ISAMeta):
             args = {
                 **self.ilcls.values,
                 **self.ilcls.defaults,
-                **resolve_values(self.ilcls, self.ilcls._fields, self.kwargs),
-                **resolve_values(self.ilcls, self.ilcls._fields, kwargs),
+                **self.ilcls.resolve_values(self.kwargs),
+                **self.ilcls.resolve_values(kwargs),
             }
             if len(args) < len(self.ilcls.layout):
                 missing = list(self.ilcls.layout)
