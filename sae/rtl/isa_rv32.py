@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import re
+from functools import partial
 
 from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
+from .. import st
 from .isa import ISA
 
 __all__ = ["RV32I", "RV32IC"]
@@ -136,7 +138,7 @@ class RV32I(ISA):
         layout = ("opcode", "rd", "funct3", "rs1", "imm")
         defaults = {"opcode": "OP_IMM"}
 
-        class Funct(IntEnum, shape=3):
+        class IFunct(IntEnum, shape=3):
             ADDI = 0b000
             SLTI = 0b010
             SLTIU = 0b011
@@ -146,19 +148,56 @@ class RV32I(ISA):
             SLLI = 0b001
             SRI = 0b101
 
-    ADDI = I(funct3=I.Funct.ADDI)
-    SLTI = I(funct3=I.Funct.SLTI)
-    SLTIU = I(funct3=I.Funct.SLTIU)
-    XORI = I(funct3=I.Funct.XORI)
-    ORI = I(funct3=I.Funct.ORI)
-    ANDI = I(funct3=I.Funct.ANDI)
-    SLLI = I(funct3=I.Funct.SLLI)
-    SRLI = I(funct3=I.Funct.SRI)
-    # SRAI = SRLI.partial(...) # XXX TODO: we want to set imm[11:5] to 0b0100000
+        class LFunct(IntEnum, shape=3):
+            # Note the bottom 2 bits convey the size the same as AccessWidth.
+            LB = 0b000
+            LH = 0b001
+            LW = 0b010
+            LBU = 0b100
+            LHU = 0b101
+
+    ADDI = I(funct3=I.IFunct.ADDI)
+    SLTI = I(funct3=I.IFunct.SLTI)
+    SLTIU = I(funct3=I.IFunct.SLTIU)
+    XORI = I(funct3=I.IFunct.XORI)
+    ORI = I(funct3=I.IFunct.ORI)
+    ANDI = I(funct3=I.IFunct.ANDI)
+
+    @staticmethod
+    def shamt_xfrm(shamt, *, imm11_5=0):
+        assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
+        return {"imm": (imm11_5 << 5) | shamt}
+
+    SLLI = I(funct3=I.IFunct.SLLI).xfrm(shamt_xfrm)
+    SRLI = I(funct3=I.IFunct.SRI).xfrm(shamt_xfrm)
+    SRAI = I(funct3=I.IFunct.SRI).xfrm(partial(shamt_xfrm, imm11_5=0b0100000))
 
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR.partial(rd="zero", rs1="ra", imm=0)
 
+    @staticmethod
+    def rs1off_xfrm(rs1off):
+        """
+        Transforms "rs1off" to an (offset, reg) pair.
+
+        * Passes through an (offset, reg) pair unchanged.
+        * Parses an (offset, regstr) pair.
+        *
+        """
+        match rs1off:
+            case (int(), RV32I.Reg()):
+                return {"imm": rs1off[0], "rs1": rs1off[1]}
+            case (int(), str()):
+                return {"imm": rs1off[0], "rs1": RV32I.Reg(rs1off[1])}
+            case st.Offset():
+                return {
+                    "imm": rs1off.offset,
+                    "rs1": RV32I.Reg(rs1off.register.register),
+                }
+            case _:
+                assert False, f"unknown rs1off {rs1off!r}"
+
+    LB = I(opcode="LOAD", funct3=I.LFunct.LB).xfrm(rs1off_xfrm)
 
     class S(IL):
         layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
