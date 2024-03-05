@@ -51,26 +51,40 @@ class TestISAILayout(unittest.TestCase):
         self.assertEqual(unsigned(32), Shape.cast(RV32I.R.shape))
         self.assertEqual(("opcode", "rd", "imm"), RV32I.U.layout)
 
-    def test_bad_field(self):
-        with self.assertRaisesRegex(TypeError, r"^Unknown field specifier 1\.$"):
+        self.assertEqual({"opcode": RV32I.Opcode.OP}, RV32I.R.values)
+
+    def test_missing_len(self):
+        with self.assertRaisesRegex(
+            ValueError, r"^'sae\..*\.I\.IL' missing len, and no default given\.$"
+        ):
 
             class I(ISA):
-                class IL(ISA.ILayout, len=1):
-                    layout = (1, 2)
+                class IL(ISA.ILayout):
+                    layout = (1,)
 
     def test_bad_tuple(self):
         with self.assertRaisesRegex(
-            TypeError, r"^Expected tuple for 'sae.rtl.test_[^']+\.I\.X', not str\.$"
+            TypeError, r"^Expected tuple for 'sae\..*\.I\.X', not str\.$"
         ):
 
             class I(ISA):
                 class X(ISA.ILayout, len=1):
                     layout = "abc"  # i.e. ("abc") typed instead of ("abc",)
 
+    def test_bad_field(self):
+        with self.assertRaisesRegex(
+            TypeError, r"^Unknown field specifier \[\] in layout of 'sae\..*\.I\.X'\.$"
+        ):
+
+            class I(ISA):
+                class X(ISA.ILayout, len=1):
+                    layout = ([], "abc")
+
     def test_unregistered(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^Field specifier 'abc' not registered, and no 'resolve' implementation available\.$",
+            r"^Field specifier 'abc' not registered, and "
+            r"no 'resolve' implementation available\.$",
         ):
 
             class I(ISA):
@@ -101,6 +115,95 @@ class TestISAILayout(unittest.TestCase):
                     sh3: 4
 
                     layout = ("sh1", "sh2", "sh3")
+
+    def test_value_default_overlap(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^'sae\..*\.I\.IL' sets the following in both 'values' and 'defaults': \['b', 'c'\]\.$",
+        ):
+
+            class I(ISA):
+                class IL(ISA.ILayout, len=12):
+                    a: 4
+                    b: 4
+                    c: 4
+
+                    layout = ("a", "b", "c")
+                    values = {"a": 1, "b": 2, "c": 3}
+                    defaults = {"b": 4, "c": 5}
+
+    def test_default_missing_annotation(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            r"^Cannot resolve default value for element of 'sae\..*\.I\.IL': 'b'='X'\.$"
+        ):
+
+            class I(ISA):
+                class IL(ISA.ILayout, len=8):
+                    a: 4
+
+                    layout = ("a", ("b", 4))
+                    values = {"a": 1}
+                    defaults = {"b": "X"}
+
+
+class TestISAInsns(unittest.TestCase):
+    def test_base(self):
+        self.assertEqual(
+            0x00C5_8533,
+            RV32I.ADD(rd=RV32I.Reg("a0"), rs1=RV32I.Reg("a1"), rs2=RV32I.Reg("a2")),
+        )
+        self.assertEqual(
+            0x4000_50B3,
+            RV32I.SRA(rd=RV32I.Reg("x1"), rs1=RV32I.Reg("x0"), rs2=RV32I.Reg("x0")),
+        )
+
+    def test_call_nonleaf(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            r"^'sae\..*\.RV32I\.IL' called, but it's layoutless\.$",
+        ):
+            RV32I.IL(a=1)
+
+    def test_bad_define(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^'sae\..*\.RV32I\.R' called with argument 'xyz', "
+            r"which is not part of its layout\.$",
+        ):
+            RV32I.R(xyz=1)
+
+    def test_bad_call(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^'sae\..*\.RV32I\.R' called with argument 'xyz', "
+            r"which is not part of its IL's layout\.$",
+        ):
+            RV32I.R()(xyz=1)
+
+    def test_bad_define_override(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R' and cannot "
+            r"be overridden\.$",
+        ):
+            RV32I.R(opcode=1)
+
+    def test_bad_call_override(self):
+        with self.assertRaisesRegex(
+            ValueError,
+            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R' and cannot "
+            r"be overridden in thunk\.$",
+        ):
+            RV32I.R()(opcode=1)
+
+    def test_call_insufficient(self):
+        with self.assertRaisesRegex(
+            TypeError,
+            r"^'sae\..*\.RV32I\.ADD' called without supplying values "
+            r"for arguments: \['rd', 'rs1', 'rs2'\]\.$",
+        ):
+            RV32I.ADD()
 
 
 class TestISAInheritance(unittest.TestCase):

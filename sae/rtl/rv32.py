@@ -217,7 +217,7 @@ class InsR(Struct):
 for op in ["add", "slt", "sltu", "and", "or", "xor", "sll", "srl", "sub", "sra"]:
 
     def f(op, rd, rs1, rs2):
-        if isinstance(rs2, int):
+        if type(rs2) == int:
             # add sp,sp,4 => addi sp,sp,4
             return INSNS[f"{op}i"](rd, rs1, rs2)
 
