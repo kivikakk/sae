@@ -201,6 +201,9 @@ class ISA(metaclass=ISAMeta):
                 name: cls.resolve_value(name, value) for name, value in values.items()
             }
 
+        def xfrm(cls, *args, **kwargs):
+            return cls().xfrm(*args, **kwargs)
+
     class ILayout(metaclass=ILayoutMeta):
         pass
 
@@ -269,7 +272,6 @@ class ISA(metaclass=ISAMeta):
             return clone
 
         def xfrm(self, xfn, **kwarg_defaults):
-            # I wonder if we'll ever want to .xfrm().partial(...)?
             clone = self.clone()
             parameters = inspect.signature(xfn).parameters
 

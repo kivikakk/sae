@@ -161,6 +161,12 @@ class RV32I(ISA):
             ECALL = 0b000000000000000
             EBREAK = 0b000000000001000
 
+        @staticmethod
+        def shamt_xfrm(shamt, *, imm11_5=0):
+            assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
+            return {"imm": (imm11_5 << 5) | shamt}
+
+
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
     SLTIU = I(funct3=I.IFunct.SLTIU)
@@ -168,14 +174,9 @@ class RV32I(ISA):
     ORI = I(funct3=I.IFunct.ORI)
     ANDI = I(funct3=I.IFunct.ANDI)
 
-    @staticmethod
-    def shamt_xfrm(shamt, *, imm11_5=0):
-        assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
-        return {"imm": (imm11_5 << 5) | shamt}
-
-    SLLI = I(funct3=I.IFunct.SLLI).xfrm(shamt_xfrm)
-    SRLI = I(funct3=I.IFunct.SRI).xfrm(shamt_xfrm)
-    SRAI = I(funct3=I.IFunct.SRI).xfrm(shamt_xfrm, imm11_5=0b0100000)
+    SLLI = I(funct3=I.IFunct.SLLI).xfrm(I.shamt_xfrm)
+    SRLI = I(funct3=I.IFunct.SRI).xfrm(I.shamt_xfrm)
+    SRAI = I(funct3=I.IFunct.SRI).xfrm(I.shamt_xfrm, imm11_5=0b0100000)
 
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR.partial(rd="zero", rs1="ra", imm=0)
@@ -268,7 +269,7 @@ class RV32I(ISA):
         def imm_xfrm(imm):
             return {"imm4_0": imm & 0x1F, "imm11_5": imm >> 5}
 
-    _store = S().xfrm(rs1off_xfrm).xfrm(S.imm_xfrm)
+    _store = S.xfrm(rs1off_xfrm).xfrm(S.imm_xfrm)
     SB = _store.partial(funct3=S.Funct.SB)
     SH = _store.partial(funct3=S.Funct.SH)
     SW = _store.partial(funct3=S.Funct.SW)
@@ -303,7 +304,7 @@ class RV32I(ISA):
                 "imm12": (imm >> 12) & 1,
             }
 
-    _branch = B().xfrm(B.imm_xfrm)
+    _branch = B.xfrm(B.imm_xfrm)
     BEQ = _branch.partial(funct3=B.Funct.BEQ)
     BNE = _branch.partial(funct3=B.Funct.BNE)
     BLT = _branch.partial(funct3=B.Funct.BLT)
@@ -322,7 +323,7 @@ class RV32I(ISA):
                 assert 0 < -imm <= 2**20 - 1, f"imm is {imm}"
             return {"imm": imm}
 
-    _upper = U().xfrm(U.check_xfrm)
+    _upper = U.xfrm(U.check_xfrm)
     LUI = _upper.partial(opcode="LUI")
     AUIPC = _upper.partial(opcode="AUIPC")
 
@@ -339,7 +340,7 @@ class RV32I(ISA):
                 "imm20": imm >> 20,
             }
 
-    JAL = J().xfrm(J.imm_xfrm)
+    JAL = J.xfrm(J.imm_xfrm)
     J_ = JAL.partial(rd="zero")  # XXX uhm.
 
 
