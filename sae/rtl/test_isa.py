@@ -135,7 +135,7 @@ class TestISAILayout(unittest.TestCase):
     def test_default_missing_annotation(self):
         with self.assertRaisesRegex(
             TypeError,
-            r"^Cannot resolve default value for element of 'sae\..*\.I\.IL': 'b'='X'\.$"
+            r"^Cannot resolve default value for element of 'sae\..*\.I\.IL': 'b'='X'\.$",
         ):
 
             class I(ISA):
@@ -153,21 +153,21 @@ class TestISAInsns(unittest.TestCase):
             0x00C5_8533,
             RV32I.ADD(rd=RV32I.Reg("a0"), rs1=RV32I.Reg("a1"), rs2=RV32I.Reg("a2")),
         )
+        self.assertEqual(0x4000_50B3, RV32I.SRA(rd="x1", rs1=("x0"), rs2=("x0")))
+        self.assertEqual(0x40A5_D513, RV32I.SRAI(rd="a0", rs1="a1", shamt=0b01010))
+        self.assertEqual(0x0000_8067, RV32I.RET())
+        self.assertEqual(0x0000_0503, RV32I.LB(rd="a0", rs1off=(0, "x0")))
+        self.assertEqual(0x8330_000F, RV32I.FENCE_TSO())
+        self.assertEqual(0x0010_0073, RV32I.EBREAK())
+        self.assertEqual(0x00B5_0223, RV32I.SB(rs2="a1", rs1off=(4, "a0")))
+        self.assertEqual(0xC562_35EF, RV32I.JAL(rd="a1", imm=0x0012_3456))
+        self.assertEqual(0xC562_306F, RV32I.J_(imm=0x0012_3456))
+
+    def test_base_li(self):
+        self.assertEqual([0x1230_0593], RV32I.LI(rd="a1", imm=0x123))
+        self.assertEqual([0x0000_15B7, 0x2345_8593], RV32I.LI(rd="a1", imm=0x1234))
         self.assertEqual(
-            0x4000_50B3,
-            RV32I.SRA(rd="x1", rs1=("x0"), rs2=("x0")),
-        )
-        self.assertEqual(
-            0x40A5_D513,
-            RV32I.SRAI(rd="a0", rs1="a1", shamt=0b01010),
-        )
-        self.assertEqual(
-            0x0000_8067,
-            RV32I.RET(),
-        )
-        self.assertEqual(
-            0x0000_0503,
-            RV32I.LB(rd="a0", rs1off=(0, "x0"))
+            [0x1234_55B7, 0x4005_8593, 0x4005_8593], RV32I.LI(rd="a1", imm=0x1234_5800)
         )
 
     def test_call_nonleaf(self):
@@ -216,6 +216,7 @@ class TestISAInsns(unittest.TestCase):
             r"for arguments: \['rd', 'rs1', 'rs2'\]\.$",
         ):
             RV32I.ADD()
+
 
 class TestISAInheritance(unittest.TestCase):
     def test_base(self):

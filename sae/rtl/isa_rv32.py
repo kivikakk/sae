@@ -155,6 +155,13 @@ class RV32I(ISA):
             LBU = 0b100
             LHU = 0b101
 
+        class MMFunct(IntEnum, shape=3):
+            FENCE = 0b000
+
+        class SFunct(IntEnum, shape=15):
+            ECALL = 0b000000000000000
+            EBREAK = 0b000000000001000
+
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
     SLTIU = I(funct3=I.IFunct.SLTIU)
@@ -177,11 +184,11 @@ class RV32I(ISA):
     @staticmethod
     def rs1off_xfrm(rs1off):
         """
-        Transforms "rs1off" to an (offset, reg) pair.
+        Transforms "rs1off" into "imm" and "rs1".
 
         * Passes through an (offset, reg) pair unchanged.
         * Parses an (offset, regstr) pair.
-        *
+        * Parses an st.Offset().
         """
         match rs1off:
             case (int(), RV32I.Reg()):
@@ -196,10 +203,76 @@ class RV32I(ISA):
             case _:
                 assert False, f"unknown rs1off {rs1off!r}"
 
-    LB = I(opcode="LOAD", funct3=I.LFunct.LB).xfrm(rs1off_xfrm)
+    _load = I(opcode="LOAD").xfrm(rs1off_xfrm).partial
+    LB = _load(funct3=I.LFunct.LB)
+    LH = _load(funct3=I.LFunct.LH)
+    LW = _load(funct3=I.LFunct.LW)
+    LBU = _load(funct3=I.LFunct.LBU)
+    LHU = _load(funct3=I.LFunct.LHU)
+
+    @staticmethod
+    def fence_arg(a, *, _arg=re.compile(r"\A[rwio]+\Z")):
+        a = a.lower()
+        assert _arg.match(a) is not None
+        return (
+            (0b0001 if "w" in a else 0)
+            | (0b0010 if "r" in a else 0)
+            | (0b0100 if "o" in a else 0)
+            | (0b1000 if "i" in a else 0)
+        )
+
+    @staticmethod
+    def fence_xfrm(pred, succ, *, fm=0):
+        return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
+
+    FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
+    FENCE_TSO = FENCE.partial(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
+
+    @staticmethod
+    def system_xfrm(funct):
+        return {"funct3": funct & 0x7, "imm": funct >> 3}
+
+    _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(system_xfrm).partial
+    ECALL = _system(funct=I.SFunct.ECALL)
+    EBREAK = _system(funct=I.SFunct.EBREAK)
+
+    @classmethod
+    def LI(cls, *, rd, imm):
+        if (imm & 0xFFF) == imm:
+            return [cls.ADDI(rd=rd, rs1="x0", imm=imm)]
+        if imm & 0x800:
+            return [
+                cls.LUI(rd=rd, imm=imm >> 12),
+                cls.ADDI(rd=rd, rs1=rd, imm=(imm & 0xFFF) >> 1),
+                cls.ADDI(rd=rd, rs1=rd, imm=((imm & 0xFFF) >> 1) + int(imm & 1)),
+            ]
+        return [
+            cls.LUI(rd=rd, imm=imm >> 12),
+            cls.ADDI(rd=rd, rs1=rd, imm=imm & 0xFFF),
+        ]
+
+    MV = ADDI.partial(imm=0)
+    SEQZ = SLTIU.partial(imm=1)
+    NOT = XORI.partial(imm=-1)
+    NOP = ADDI.partial(rd="zero", rs1="zero", imm=0)
 
     class S(IL):
         layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
+        values = {"opcode": "STORE"}
+
+        class Funct(IntEnum, shape=3):
+            SB = 0b000
+            SH = 0b001
+            SW = 0b010
+
+        @staticmethod
+        def imm_xfrm(imm):
+            return {"imm4_0": imm & 0x1F, "imm11_5": imm >> 5}
+
+    _store = S().xfrm(rs1off_xfrm).xfrm(S.imm_xfrm)
+    SB = _store.partial(funct3=S.Funct.SB)
+    SH = _store.partial(funct3=S.Funct.SH)
+    SW = _store.partial(funct3=S.Funct.SW)
 
     class B(IL):
         layout = (
@@ -213,11 +286,38 @@ class RV32I(ISA):
             "imm12",
         )
 
+    # TODO
+
     class U(IL):
         layout = ("opcode", "rd", "imm")
 
+        @staticmethod
+        def check_xfrm(imm):
+            if imm > 0:
+                assert 0 < imm <= 2**20 - 1, f"imm is {imm}"
+            elif imm < 0:
+                assert 0 < -imm <= 2**20 - 1, f"imm is {imm}"
+            return {"imm": imm}
+
+    _u = U().xfrm(U.check_xfrm)
+    LUI = _u.partial(opcode="LUI")
+    AUIPC = _u.partial(opcode="AUIPC")
+
     class J(IL):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
+        values = {"opcode": "JAL"}
+
+        @staticmethod
+        def imm_xfrm(imm):
+            return {
+                "imm10_1": (imm >> 1) & 0x3FF,
+                "imm11": (imm >> 11) & 1,
+                "imm19_12": (imm >> 12) & 0xFF,
+                "imm20": imm >> 20,
+            }
+
+    JAL = J().xfrm(J.imm_xfrm)
+    J_ = JAL.partial(rd="zero") # XXX uhm.
 
 
 class RV32IC(RV32I):

@@ -225,15 +225,14 @@ class ISA(metaclass=ISAMeta):
                     )
 
         def __call__(self, **kwargs):
-            kwargs = reduce(lambda kwargs, f: f(kwargs), self.xfrms, kwargs)
-
-            for name in kwargs:
+            combined = self.do_xfrms(self.kwargs | kwargs)
+            for name in combined:
                 if name not in self.ilcls.layout:
                     raise ValueError(
                         f"'{self.ilcls.__fullname__}' called with argument "
                         f"{name!r}, which is not part of its IL's layout."
                     )
-                if (
+                if name in kwargs and (
                     name in self.ilcls.values
                     or name in self.ilcls.defaults
                     or name in self.kwargs
@@ -242,12 +241,13 @@ class ISA(metaclass=ISAMeta):
                         f"{name!r} is already defined for '{self.ilcls.__fullname__}' "
                         f"and cannot be overridden in thunk."
                     )
+
             args = {
                 **self.ilcls.values,
                 **self.ilcls.defaults,
-                **self.ilcls.resolve_values(self.kwargs),
-                **self.ilcls.resolve_values(kwargs),
+                **self.ilcls.resolve_values(combined),
             }
+
             if len(args) < len(self.ilcls.layout):
                 missing = list(self.ilcls.layout)
                 for name in args:
@@ -280,13 +280,16 @@ class ISA(metaclass=ISAMeta):
                     if p.default is p.empty:
                         args[name] = kwargs.pop(name)
                     else:
-                        # Default value (in function signature) may only be overridden
+                        # Default value (in function signature) may be overridden
                         # by kwarg_defaults.
-                        if name in kwargs:
-                            raise ValueError(f"Can't override {name!r} here.")
-                        args[name] = kwarg_defaults.get(name, p.default)
+                        args[name] = kwargs.pop(
+                            name, kwarg_defaults.get(name, p.default)
+                        )
                 kwargs.update(xfn(**{**kwarg_defaults, **args}))
                 return kwargs
 
             clone.xfrms.append(pipe)
             return clone
+
+        def do_xfrms(self, kwargs):
+            return reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, kwargs)
