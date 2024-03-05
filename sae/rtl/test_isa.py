@@ -157,6 +157,10 @@ class TestISAInsns(unittest.TestCase):
             0x4000_50B3,
             RV32I.SRA(rd=RV32I.Reg("x1"), rs1=RV32I.Reg("x0"), rs2=RV32I.Reg("x0")),
         )
+        self.assertEqual(
+            0x0000_8067,
+            RV32I.RET(),
+        )
 
     def test_call_nonleaf(self):
         with self.assertRaisesRegex(
@@ -205,9 +209,9 @@ class TestISAInsns(unittest.TestCase):
         ):
             RV32I.ADD()
 
-
 class TestISAInheritance(unittest.TestCase):
     def test_base(self):
         self.assertIs(RV32I.Reg, RV32IC.Reg)
         self.assertIs(RV32I.Reg, RV32IC.CR.shape["rs2"].shape)
         self.assertIs(RV32I.I, RV32IC.I)
+        self.assertIs(RV32I.ADD, RV32IC.ADD)
