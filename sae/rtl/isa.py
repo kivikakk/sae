@@ -268,10 +268,9 @@ class ISA(metaclass=ISAMeta):
             clone.kwargs.update(kwargs)
             return clone
 
-        def xfrm(self, xfn):
+        def xfrm(self, xfn, **kwarg_defaults):
             # I wonder if we'll ever want to .xfrm().partial(...)?
             clone = self.clone()
-
             parameters = inspect.signature(xfn).parameters
 
             @wraps(xfn)
@@ -281,8 +280,12 @@ class ISA(metaclass=ISAMeta):
                     if p.default is p.empty:
                         args[name] = kwargs.pop(name)
                     else:
-                        args[name] = kwargs.pop(name, p.default)
-                kwargs.update(xfn(**args))
+                        # Default value (in function signature) may only be overridden
+                        # by kwarg_defaults.
+                        if name in kwargs:
+                            raise ValueError(f"Can't override {name!r} here.")
+                        args[name] = kwarg_defaults.get(name, p.default)
+                kwargs.update(xfn(**{**kwarg_defaults, **args}))
                 return kwargs
 
             clone.xfrms.append(pipe)
