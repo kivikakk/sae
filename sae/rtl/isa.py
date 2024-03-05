@@ -14,16 +14,41 @@ It encompasses:
   * Each layout has a common field, the opcode.
 * Instructions encoded using those layouts.
 
-"""
-
-
-"""
 
 TODO
 
 * We could also bind registers/ILs to the ISA they were created in!
 
 """
+
+
+def resolve_value(cls, fields, name, value):
+    match value:
+        case int():
+            return value
+        case str():
+            try:
+                field = fields[name]
+                try:
+                    return field[value]
+                except KeyError:
+                    return field(value)
+            except Exception as e:
+                raise TypeError(
+                    f"Cannot resolve default value for element of '{cls.__fullname__}': "
+                    f"{name!r}={value!r}."
+                ) from e
+        case _:
+            assert False, (
+                f"unhandled resolving '{cls.__fullname__}': "
+                f"{name!r}={value!r} (fields={fields!r})"
+            )
+
+
+def resolve_values(cls, fields, values):
+    return {
+        name: resolve_value(cls, fields, name, value) for name, value in values.items()
+    }
 
 
 class ISAMeta(type):
@@ -114,18 +139,6 @@ class ISA(metaclass=ISAMeta):
             if not hasattr(cls, "layout"):
                 raise TypeError(f"'{cls.__fullname__}' called, but it's layoutless.")
 
-            for name in kwargs:
-                if name not in cls.layout:
-                    raise ValueError(
-                        f"'{cls.__fullname__}' called with argument "
-                        f"{name!r}, which is not part of its layout."
-                    )
-                if name in cls.values:
-                    raise ValueError(
-                        f"{name!r} is already defined for '{cls.__fullname__}' "
-                        f"and cannot be overridden."
-                    )
-
             return ISA.IThunk(cls, kwargs)
 
         @property
@@ -188,18 +201,13 @@ class ISA(metaclass=ISAMeta):
                     f"Layout components are excessive (fills {consumed}/{cls.len})."
                 )
 
+            cls._fields = fields
+
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
 
-            cls.values = {
-                name: cls.resolve_value(fields, name, value)
-                for name, value in getattr(cls, "values", {}).items()
-            }
-
-            cls.defaults = {
-                name: cls.resolve_value(fields, name, value)
-                for name, value in getattr(cls, "defaults", {}).items()
-            }
+            cls.values = resolve_values(cls, fields, getattr(cls, "values", {}))
+            cls.defaults = resolve_values(cls, fields, getattr(cls, "defaults", {}))
 
             overlap = []
             for name in cls.layout:
@@ -211,21 +219,6 @@ class ISA(metaclass=ISAMeta):
                     f"'values' and 'defaults': {overlap!r}."
                 )
 
-        def resolve_value(cls, fields, name, value):
-            match value:
-                case int():
-                    return value
-                case str():
-                    try:
-                        return fields[name][value]
-                    except Exception as e:
-                        raise TypeError(
-                            f"Cannot resolve default value for element of '{cls.__fullname__}': "
-                            f"{name!r}={value!r}."
-                        ) from e
-                case _:
-                    assert False, f"unhandled: {value!r}"
-
     class ILayout(metaclass=ILayoutMeta):
         pass
 
@@ -234,6 +227,19 @@ class ISA(metaclass=ISAMeta):
             self.ilcls = ilcls
             self.kwargs = kwargs
             self._needs_named = True
+            self.__fullname__ = f"{ilcls.__fullname__} child"
+
+            for name in kwargs:
+                if name not in ilcls.layout:
+                    raise ValueError(
+                        f"'{ilcls.__fullname__}' called with argument "
+                        f"{name!r}, which is not part of its layout."
+                    )
+                if name in getattr(ilcls, "values", {}):
+                    raise ValueError(
+                        f"{name!r} is already defined for '{ilcls.__fullname__}' "
+                        f"and cannot be overridden."
+                    )
 
         def __call__(self, **kwargs):
             for name in kwargs:
@@ -242,12 +248,21 @@ class ISA(metaclass=ISAMeta):
                         f"'{self.ilcls.__fullname__}' called with argument "
                         f"{name!r}, which is not part of its IL's layout."
                     )
-                if name in self.ilcls.values or name in self.kwargs:
+                if (
+                    name in self.ilcls.values
+                    or name in self.ilcls.defaults
+                    or name in self.kwargs
+                ):
                     raise ValueError(
                         f"{name!r} is already defined for '{self.ilcls.__fullname__}' "
                         f"and cannot be overridden in thunk."
                     )
-            args = {**self.ilcls.values, **self.ilcls.defaults, **self.kwargs, **kwargs}
+            args = {
+                **self.ilcls.values,
+                **self.ilcls.defaults,
+                **resolve_values(self.ilcls, self.ilcls._fields, self.kwargs),
+                **resolve_values(self.ilcls, self.ilcls._fields, kwargs),
+            }
             if len(args) < len(self.ilcls.layout):
                 missing = list(self.ilcls.layout)
                 for name in args:
@@ -258,3 +273,7 @@ class ISA(metaclass=ISAMeta):
                 )
 
             return self.ilcls.shape.const(args).as_value().value
+
+        def partial(self, **kwargs):
+            # Note that overwriting defaults is allowed in partial().
+            return ISA.IThunk(self.ilcls, {**self.kwargs, **kwargs})

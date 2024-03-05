@@ -127,11 +127,38 @@ class RV32I(ISA):
     XOR = R(funct3=R.Funct.XOR)
     SLL = R(funct3=R.Funct.SLL)
     SRL = R(funct3=R.Funct.SR)
-    SUB = R(funct3=R.Funct.ADDSUB, funct7=R.F7Negate)
-    SRA = R(funct3=R.Funct.SR, funct7=R.F7Negate)
+    SUB = ADD.partial(funct7=R.F7Negate)
+    SRA = SRL.partial(funct7=R.F7Negate)
+
+    SNEZ = SLTU.partial(rs1="zero")
 
     class I(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "imm")
+        defaults = {"opcode": "OP_IMM"}
+
+        class Funct(IntEnum, shape=3):
+            ADDI = 0b000
+            SLTI = 0b010
+            SLTIU = 0b011
+            XORI = 0b100
+            ORI = 0b110
+            ANDI = 0b111
+            SLLI = 0b001
+            SRI = 0b101
+
+    ADDI = I(funct3=I.Funct.ADDI)
+    SLTI = I(funct3=I.Funct.SLTI)
+    SLTIU = I(funct3=I.Funct.SLTIU)
+    XORI = I(funct3=I.Funct.XORI)
+    ORI = I(funct3=I.Funct.ORI)
+    ANDI = I(funct3=I.Funct.ANDI)
+    SLLI = I(funct3=I.Funct.SLLI)
+    SRLI = I(funct3=I.Funct.SRI)
+    # SRAI = SRLI.partial(...) # XXX TODO: we want to set imm[11:5] to 0b0100000
+
+    JALR = I(opcode="JALR", funct3=0)
+    RET = JALR.partial(rd="zero", rs1="ra", imm=0)
+
 
     class S(IL):
         layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")

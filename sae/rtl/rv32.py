@@ -258,7 +258,7 @@ class InsI(Struct):
 
 # TODO: bounds checking on imm arguments
 
-for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr", "load"]:
+for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr"]:
 
     def f(op, rd, rs1, imm):
         if imm > 0:
@@ -274,6 +274,26 @@ for op in ["addi", "slti", "sltiu", "andi", "ori", "xori", "jalr", "load"]:
                 opcode = Opcode.OP_IMM
                 funct3 = OpImmFunct[op.upper()]
         return value(InsI, opcode=opcode, funct3=funct3, rs1=rs1, rd=rd, imm=imm)
+
+    add_insn(op, f)
+
+for op in ["slli", "srli", "srai"]:
+
+    def f(op, rd, rs1, shamt):
+        assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
+
+        funct3, imm11_5 = {
+            "srli": ("SRI", 0b0000000),
+            "srai": ("SRI", 0b0100000),
+        }.get(op, (op.upper(), 0))
+        return value(
+            InsI,
+            opcode=Opcode.OP_IMM,
+            funct3=OpImmFunct[funct3],
+            rs1=rs1,
+            rd=rd,
+            imm=(imm11_5 << 5) | shamt,
+        )
 
     add_insn(op, f)
 
@@ -377,26 +397,6 @@ add_insn("mv", lambda op, rd, rs: INSNS["addi"](rd, rs, 0))
 add_insn("seqz", lambda op, rd, rs: INSNS["sltiu"](rd, rs, 1))
 add_insn("not", lambda op, rd, rs: INSNS["xori"](rd, rs, -1))
 add_insn("nop", lambda op: INSNS["addi"](Reg.X0, Reg.X0, 0))
-
-for op in ["slli", "srli", "srai"]:
-
-    def f(op, rd, rs1, shamt):
-        assert 0 <= shamt <= 0b11111, f"shamt is {shamt}"
-
-        funct3, imm11_5 = {
-            "srli": ("SRI", 0b0000000),
-            "srai": ("SRI", 0b0100000),
-        }.get(op, (op.upper(), 0))
-        return value(
-            InsI,
-            opcode=Opcode.OP_IMM,
-            funct3=OpImmFunct[funct3],
-            rs1=rs1,
-            rd=rd,
-            imm=(imm11_5 << 5) | shamt,
-        )
-
-    add_insn(op, f)
 
 
 # S:
