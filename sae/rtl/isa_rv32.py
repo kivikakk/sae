@@ -179,7 +179,7 @@ class RV32I(ISA):
             EBREAK = 0b000000000001000
 
         @staticmethod
-        def shamt_xfrm(shamt, *, imm11_5=0):
+        def shamt_xfrm(shamt, *, imm11_5=0) -> "imm":
             assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
             return {"imm": (imm11_5 << 5) | shamt}
 
