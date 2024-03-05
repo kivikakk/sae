@@ -7,12 +7,15 @@ from amaranth.sim import Simulator, Tick
 from rainhdx import Platform
 
 from . import Hart, State
+from .isa_rv32 import RV32I
 from .mmu import AccessWidth
-from .rv32 import Reg, disasm
+from .rv32 import disasm
 
 __all__ = ["run_until_fault", "print_mmu"]
 
 SYSMEM_TO_SHOW = 8
+
+Reg = RV32I.Reg
 
 
 @singledispatch
@@ -65,7 +68,7 @@ def run_until_fault(hart, *, max_cycles=1000):
                     v = yield hart.xreg[i]
                     if i in written or v:
                         written.add(i)
-                        rn = Reg[f"X{i}"].friendly
+                        rn = Reg(f"x{i}").name
                         print(f"  {rn}={(yield hart.xreg[i]):08x}", end="")
                 print()
                 yield from print_mmu(hart.mmu, prefix="  ")
@@ -74,7 +77,7 @@ def run_until_fault(hart, *, max_cycles=1000):
         results["pc"] = yield hart.pc
         for i in range(1, 32):
             if not hart.track_reg_written or (yield hart.xreg_written[i]):
-                results[Reg[f"X{i}"]] = yield hart.xreg[i]
+                results[Reg(f"x{i}")] = yield hart.xreg[i]
         results["faultcode"] = yield hart.fault_code
         results["faultinsn"] = yield hart.fault_insn
         if uart:

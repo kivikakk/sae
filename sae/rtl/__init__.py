@@ -7,10 +7,8 @@ from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, ResetInserter,
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 
+from .isa_rv32 import RV32I
 from .mmu import MMU, AccessWidth
-from .rv32 import (ISA, InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct,
-                   Opcode, OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
-                   OpStoreFunct, OpSystemFunct, Reg)
 from .uart import UART
 
 __all__ = [
@@ -21,7 +19,7 @@ __all__ = [
 ]
 
 
-class State(IntEnum, shape=1):  # type: ignore
+class State(IntEnum, shape=1):
     RUNNING = 0
     FAULTED = 1
 
@@ -30,12 +28,6 @@ class FaultCode(IntEnum):
     UNSET = 0
     ILLEGAL_INSTRUCTION = 1
     PC_MISALIGNED = 2
-
-
-class LsSize(IntEnum, shape=2):  # type: ignore
-    B = 0
-    H = 1
-    W = 2
 
 
 class Top(Elaboratable):
@@ -66,7 +58,6 @@ class Hart(Elaboratable):
     XLEN = 32
     XCOUNT = 32
 
-    isa: ISA
     sysmem: Memory
     uart: UART
     reg_inits: Optional[dict[str, int]]
@@ -82,14 +73,13 @@ class Hart(Elaboratable):
     pc: Signal
     insn: Signal
 
-    def __init__(self, *, isa=ISA.RVI, sysmem=None, reg_inits=None, track_reg_written=False):
-        self.isa = isa
+    def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent / "test_shrimprw.bin", memory=8192
         )
         self.reg_inits = reg_inits or {}
-        if Reg.X1 not in self.reg_inits:
-            self.reg_inits[Reg.X1] = 0xFFFF_FFFF  # ensure RET faults
+        if RV32I.Reg("x1") not in self.reg_inits:
+            self.reg_inits[RV32I.Reg("x1")] = 0xFFFF_FFFF  # ensure RET faults
         self.track_reg_written = track_reg_written
 
         self.state = Signal(State)
@@ -125,13 +115,13 @@ class Hart(Elaboratable):
                 case [e]:
                     init.append(e)
                 case _:
-                    raise RuntimeError("!?")
+                    assert False, "!?"
         return init
 
     def reg_reset(self, xn):
         if xn == 0:
             return 0
-        if init := self.reg_inits.get(Reg[f"X{xn}"]):
+        if init := self.reg_inits.get(RV32I.Reg(f"x{xn}")):
             v = init
         elif xn == 2:  # SP
             v = (Shape.cast(self.sysmem.shape).width // 8) * self.sysmem.depth
@@ -192,12 +182,12 @@ class Hart(Elaboratable):
                     self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
                 with m.Else():
-                    v_i = InsI(insn)
-                    v_u = InsU(insn)
-                    v_r = InsR(insn)
-                    v_j = InsJ(insn)
-                    v_b = InsB(insn)
-                    v_s = InsS(insn)
+                    v_i = RV32I.I(insn)
+                    v_u = RV32I.U(insn)
+                    v_r = RV32I.R(insn)
+                    v_j = RV32I.J(insn)
+                    v_b = RV32I.B(insn)
+                    v_s = RV32I.S(insn)
 
                     # sx I imm to XLEN
                     v_sxi = Signal(signed(32))
@@ -210,7 +200,7 @@ class Hart(Elaboratable):
                     m.d.sync += self.pc.eq(self.pc + 4)
 
                     with m.Switch(v_i.opcode):
-                        with m.Case(Opcode.LOAD):
+                        with m.Case(RV32I.Opcode.LOAD):
                             addr = self.xreg[v_i.rs1] + v_i.imm.as_signed()
                             m.d.sync += [
                                 mmu.read.addr.eq(addr),
@@ -219,59 +209,59 @@ class Hart(Elaboratable):
                                 self.wb_reg.eq(v_i.rd),
                             ]
                             with m.Switch(v_i.funct3):
-                                with m.Case(OpLoadFunct.LW):
+                                with m.Case(RV32I.I.LFunct.LW):
                                     m.next = "lw.delay"
-                                with m.Case(OpLoadFunct.LH):
+                                with m.Case(RV32I.I.LFunct.LH):
                                     m.next = "lh.delay"
-                                with m.Case(OpLoadFunct.LHU):
+                                with m.Case(RV32I.I.LFunct.LHU):
                                     m.next = "lhu.delay"
-                                with m.Case(OpLoadFunct.LB):
+                                with m.Case(RV32I.I.LFunct.LB):
                                     m.next = "lb.delay"
-                                with m.Case(OpLoadFunct.LBU):
+                                with m.Case(RV32I.I.LFunct.LBU):
                                     m.next = "lbu.delay"
                                 with m.Default():
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.MISC_MEM):
+                        with m.Case(RV32I.Opcode.MISC_MEM):
                             with m.Switch(v_i.funct3):
-                                with m.Case(OpMiscMemFunct.FENCE):
+                                with m.Case(RV32I.I.MMFunct.FENCE):
                                     pass  # XXX no-op
                                 with m.Default():
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.OP_IMM):
+                        with m.Case(RV32I.Opcode.OP_IMM):
                             with m.Switch(v_i.funct3):
-                                with m.Case(OpImmFunct.ADDI):
+                                with m.Case(RV32I.I.IFunct.ADDI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] + v_sxi
                                     )
-                                with m.Case(OpImmFunct.SLTI):
+                                with m.Case(RV32I.I.IFunct.SLTI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1].as_signed() < v_sxi
                                     )
-                                with m.Case(OpImmFunct.SLTIU):
+                                with m.Case(RV32I.I.IFunct.SLTIU):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] < v_sxi.as_unsigned()
                                     )
-                                with m.Case(OpImmFunct.ANDI):
+                                with m.Case(RV32I.I.IFunct.ANDI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] & v_sxi
                                     )
-                                with m.Case(OpImmFunct.ORI):
+                                with m.Case(RV32I.I.IFunct.ORI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] | v_sxi
                                     )
-                                with m.Case(OpImmFunct.XORI):
+                                with m.Case(RV32I.I.IFunct.XORI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] ^ v_sxi
                                     )
-                                with m.Case(OpImmFunct.SLLI):
+                                with m.Case(RV32I.I.IFunct.SLLI):
                                     m.d.sync += self.write_xreg(
                                         v_i.rd, self.xreg[v_i.rs1] << v_i.imm[:5]
                                     )
-                                with m.Case(OpImmFunct.SRI):
+                                with m.Case(RV32I.I.IFunct.SRI):
                                     rs1 = self.xreg[v_i.rs1]
                                     rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
                                     m.d.sync += self.write_xreg(
@@ -281,9 +271,9 @@ class Hart(Elaboratable):
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.OP):
+                        with m.Case(RV32I.Opcode.OP):
                             with m.Switch(v_r.funct3):
-                                with m.Case(OpRegFunct.ADDSUB):
+                                with m.Case(RV32I.R.Funct.ADDSUB):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd,
                                         Mux(
@@ -292,34 +282,34 @@ class Hart(Elaboratable):
                                             self.xreg[v_r.rs1] + self.xreg[v_r.rs2],
                                         ),
                                     )
-                                with m.Case(OpRegFunct.SLT):
+                                with m.Case(RV32I.R.Funct.SLT):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd,
                                         self.xreg[v_r.rs1].as_signed()
                                         < self.xreg[v_r.rs2].as_signed(),
                                     )
-                                with m.Case(OpRegFunct.SLTU):
+                                with m.Case(RV32I.R.Funct.SLTU):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] < self.xreg[v_r.rs2]
                                     )
-                                with m.Case(OpRegFunct.AND):
+                                with m.Case(RV32I.R.Funct.AND):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] & self.xreg[v_r.rs2]
                                     )
-                                with m.Case(OpRegFunct.OR):
+                                with m.Case(RV32I.R.Funct.OR):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] | self.xreg[v_r.rs2]
                                     )
-                                with m.Case(OpRegFunct.XOR):
+                                with m.Case(RV32I.R.Funct.XOR):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd, self.xreg[v_r.rs1] ^ self.xreg[v_r.rs2]
                                     )
-                                with m.Case(OpRegFunct.SLL):
+                                with m.Case(RV32I.R.Funct.SLL):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd,
                                         self.xreg[v_r.rs1] << self.xreg[v_r.rs2][:5],
                                     )
-                                with m.Case(OpRegFunct.SR):
+                                with m.Case(RV32I.R.Funct.SR):
                                     m.d.sync += self.write_xreg(
                                         v_r.rd,
                                         Mux(
@@ -333,13 +323,13 @@ class Hart(Elaboratable):
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.LUI):
+                        with m.Case(RV32I.Opcode.LUI):
                             m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
-                        with m.Case(Opcode.AUIPC):
+                        with m.Case(RV32I.Opcode.AUIPC):
                             m.d.sync += self.write_xreg(
                                 v_u.rd, (v_u.imm << 12) + self.pc
                             )
-                        with m.Case(Opcode.STORE):
+                        with m.Case(RV32I.Opcode.STORE):
                             imm = Cat(v_s.imm4_0, v_s.imm11_5)
                             addr = self.xreg[v_s.rs1] + imm.as_signed()
                             m.d.sync += [
@@ -350,56 +340,56 @@ class Hart(Elaboratable):
                             m.next = "s.delay"
 
                             with m.Switch(v_s.funct3):
-                                with m.Case(OpStoreFunct.SW):
+                                with m.Case(RV32I.S.Funct.SW):
                                     m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
-                                with m.Case(OpStoreFunct.SH):
+                                with m.Case(RV32I.S.Funct.SH):
                                     m.d.sync += mmu.write.width.eq(AccessWidth.HALF)
-                                with m.Case(OpStoreFunct.SB):
+                                with m.Case(RV32I.S.Funct.SB):
                                     m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
                                 with m.Default():
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.BRANCH):
+                        with m.Case(RV32I.Opcode.BRANCH):
                             imm = Cat(  # meow :3
                                 C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
                             ).as_signed()
                             with m.Switch(v_b.funct3):
-                                with m.Case(OpBranchFunct.BEQ):
+                                with m.Case(RV32I.B.Funct.BEQ):
                                     with m.If(self.xreg[v_b.rs1] == self.xreg[v_b.rs2]):
                                         self.jump(m, self.pc + imm)
-                                with m.Case(OpBranchFunct.BNE):
+                                with m.Case(RV32I.B.Funct.BNE):
                                     with m.If(self.xreg[v_b.rs1] != self.xreg[v_b.rs2]):
                                         self.jump(m, self.pc + imm)
-                                with m.Case(OpBranchFunct.BLT):
+                                with m.Case(RV32I.B.Funct.BLT):
                                     with m.If(
                                         self.xreg[v_b.rs1].as_signed()
                                         < self.xreg[v_b.rs2].as_signed()
                                     ):
                                         self.jump(m, self.pc + imm)
-                                with m.Case(OpBranchFunct.BGE):
+                                with m.Case(RV32I.B.Funct.BGE):
                                     with m.If(
                                         self.xreg[v_b.rs1].as_signed()
                                         >= self.xreg[v_b.rs2].as_signed()
                                     ):
                                         self.jump(m, self.pc + imm)
-                                with m.Case(OpBranchFunct.BLTU):
+                                with m.Case(RV32I.B.Funct.BLTU):
                                     with m.If(self.xreg[v_b.rs1] < self.xreg[v_b.rs2]):
                                         self.jump(m, self.pc + imm)
-                                with m.Case(OpBranchFunct.BGEU):
+                                with m.Case(RV32I.B.Funct.BGEU):
                                     with m.If(self.xreg[v_b.rs1] >= self.xreg[v_b.rs2]):
                                         self.jump(m, self.pc + imm)
                                 with m.Default():
                                     self.fault(
                                         m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
                                     )
-                        with m.Case(Opcode.JALR):
+                        with m.Case(RV32I.Opcode.JALR):
                             with self.jump(
                                 m,
                                 (self.xreg[v_i.rs1] + v_i.imm.as_signed()) & 0xFFFFFFFE,
                             ):
                                 m.d.sync += self.write_xreg(v_i.rd, self.pc + 4)
-                        with m.Case(Opcode.JAL):
+                        with m.Case(RV32I.Opcode.JAL):
                             with self.jump(
                                 m,
                                 self.pc
@@ -412,13 +402,13 @@ class Hart(Elaboratable):
                                 ).as_signed(),
                             ):
                                 m.d.sync += self.write_xreg(v_j.rd, self.pc + 4)
-                        with m.Case(Opcode.SYSTEM):
+                        with m.Case(RV32I.Opcode.SYSTEM):
                             with m.Switch(v_i.funct3):
                                 with m.Case(0):
                                     with m.Switch(v_i.imm):
-                                        with m.Case(OpSystemFunct.ECALL >> 3):
+                                        with m.Case(RV32I.I.SFunct.ECALL >> 3):
                                             m.d.sync += self.write_xreg(1, 0x1234CAFE)
-                                        with m.Case(OpSystemFunct.EBREAK >> 3):
+                                        with m.Case(RV32I.I.SFunct.EBREAK >> 3):
                                             m.d.sync += self.xreg[1].eq(0x77774444)
                                         with m.Default():
                                             self.fault(
@@ -432,10 +422,6 @@ class Hart(Elaboratable):
                                     )
                         with m.Default():
                             self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
-
-                if self.isa == ISA.RVC:
-                    with m.If():
-                        pass
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):

@@ -30,3 +30,7 @@ Easy to compile for.
 rv32.py feels like it has about half of an ISA construction kit unrolled in it, and given RV's pluggability, we'd do well to factor something out of it.
 
 Let's do RV32E and C first, so we refactor correctly.
+
+*** DONE Reproduce the assembler.
+*** TODO Reproduce the disassembler.
+*** TODO What gains can we get in the actual gateware here?
