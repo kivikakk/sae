@@ -79,7 +79,6 @@ class RV32I(ISA):
         rs1: Reg
         rs2: Reg
 
-        # TODO: make a helper to stitch together multiple imm(\d+(_\d+)?) automagically.
         def resolve(
             name,
             *,
@@ -285,8 +284,32 @@ class RV32I(ISA):
             "imm10_5",
             "imm12",
         )
+        values = {"opcode": "BRANCH"}
 
-    # TODO
+        class Funct(IntEnum, shape=3):
+            BEQ = 0b000
+            BNE = 0b001
+            BLT = 0b100
+            BGE = 0b101
+            BLTU = 0b110
+            BGEU = 0b111
+
+        @staticmethod
+        def imm_xfrm(imm):
+            return {
+                "imm4_1": (imm >> 1) & 0xF,
+                "imm10_5": (imm >> 5) & 0x3FF,
+                "imm11": (imm >> 11) & 1,
+                "imm12": (imm >> 12) & 1,
+            }
+
+    _branch = B().xfrm(B.imm_xfrm)
+    BEQ = _branch.partial(funct3=B.Funct.BEQ)
+    BNE = _branch.partial(funct3=B.Funct.BNE)
+    BLT = _branch.partial(funct3=B.Funct.BLT)
+    BGE = _branch.partial(funct3=B.Funct.BGE)
+    BLTU = _branch.partial(funct3=B.Funct.BLTU)
+    BGEU = _branch.partial(funct3=B.Funct.BGEU)
 
     class U(IL):
         layout = ("opcode", "rd", "imm")
@@ -299,9 +322,9 @@ class RV32I(ISA):
                 assert 0 < -imm <= 2**20 - 1, f"imm is {imm}"
             return {"imm": imm}
 
-    _u = U().xfrm(U.check_xfrm)
-    LUI = _u.partial(opcode="LUI")
-    AUIPC = _u.partial(opcode="AUIPC")
+    _upper = U().xfrm(U.check_xfrm)
+    LUI = _upper.partial(opcode="LUI")
+    AUIPC = _upper.partial(opcode="AUIPC")
 
     class J(IL):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
@@ -317,7 +340,7 @@ class RV32I(ISA):
             }
 
     JAL = J().xfrm(J.imm_xfrm)
-    J_ = JAL.partial(rd="zero") # XXX uhm.
+    J_ = JAL.partial(rd="zero")  # XXX uhm.
 
 
 class RV32IC(RV32I):
