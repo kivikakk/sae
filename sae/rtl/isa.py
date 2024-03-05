@@ -94,7 +94,9 @@ class ISA(metaclass=ISAMeta):
                 case ():
                     # Can't check for "shape" because this ain't finalised yet.
                     if not hasattr(cls, "layout"):
-                        raise TypeError(f"'{cls.__fullname__}' called, but it's layoutless.")
+                        raise TypeError(
+                            f"'{cls.__fullname__}' called, but it's layoutless."
+                        )
 
                     return ISA.IThunk(cls, kwargs)
 
@@ -224,6 +226,17 @@ class ISA(metaclass=ISAMeta):
             self.__fullname__ = f"{ilcls.__fullname__} child"
             self.xfrms = []
 
+            self.asm_args = list(self.layout)
+            for arg in [
+                *getattr(self.ilcls, "values", []),
+                *getattr(self.ilcls, "defaults", []),
+                *kwargs,
+            ]:
+                try:
+                    self.asm_args.remove(arg)
+                except ValueError:
+                    pass
+
             for name in kwargs:
                 if name not in ilcls.layout:
                     raise ValueError(
@@ -237,6 +250,8 @@ class ISA(metaclass=ISAMeta):
                     )
 
         def args_for(self, **kwargs):
+            print("self.kwargs", self.kwargs)
+            print("kwargs", kwargs)
             combined = self.do_xfrms(self.kwargs | kwargs)
             for name in combined:
                 if name not in self.ilcls.layout:
@@ -276,12 +291,18 @@ class ISA(metaclass=ISAMeta):
         def clone(self):
             clone = ISA.IThunk(self.ilcls, self.kwargs.copy())
             clone.xfrms = self.xfrms.copy()
+            clone.asm_args = self.asm_args.copy()
             return clone
 
         def partial(self, **kwargs):
             # Note that overwriting defaults is allowed in partial().
             clone = self.clone()
             clone.kwargs.update(kwargs)
+            for arg in kwargs:
+                try:
+                    clone.asm_args.remove(arg)
+                except ValueError:
+                    pass
             return clone
 
         def xfrm(self, xfn, **kwarg_defaults):
@@ -304,6 +325,7 @@ class ISA(metaclass=ISAMeta):
                 return kwargs
 
             clone.xfrms.append(pipe)
+            clone.asm_args. ## RESUME XXX GOOD LUCK
             return clone
 
         def do_xfrms(self, kwargs):
