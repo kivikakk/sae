@@ -85,17 +85,7 @@ class ISA:
 
         return Register
 
-    class ILayoutMeta(ShapeCastable, type):
-        def as_shape(cls):
-            return cls.shape.as_shape()
-
-        def const(cls, obj):
-            return cls.shape.const(obj)
-
-        def __call__(cls, obj):
-            return cls.shape(obj)
-
-    class ILayout(metaclass=ILayoutMeta):
+    class ILayout:
         def __init_subclass__(cls, *, len=None):
             if len is not None:
                 cls.len = len

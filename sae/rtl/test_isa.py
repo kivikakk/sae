@@ -48,7 +48,7 @@ class TestISAILayout(unittest.TestCase):
             ),
             RV32I.I.shape,
         )
-        self.assertEqual(unsigned(32), Shape.cast(RV32I.R))
+        self.assertEqual(unsigned(32), Shape.cast(RV32I.R.shape))
         self.assertEqual(("opcode", "rd", "imm"), RV32I.U.layout)
 
     def test_bad_field(self):
