@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import re
-from functools import partial
 
 from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
@@ -170,7 +169,7 @@ class RV32I(ISA):
 
     SLLI = I(funct3=I.IFunct.SLLI).xfrm(shamt_xfrm)
     SRLI = I(funct3=I.IFunct.SRI).xfrm(shamt_xfrm)
-    SRAI = I(funct3=I.IFunct.SRI).xfrm(partial(shamt_xfrm, imm11_5=0b0100000))
+    SRAI = I(funct3=I.IFunct.SRI).xfrm(shamt_xfrm, imm11_5=0b0100000)
 
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR.partial(rd="zero", rs1="ra", imm=0)
