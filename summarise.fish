@@ -24,6 +24,7 @@ set rtl \( \
     -path \*/rtl/mmu.py -o \
     -path \*/rtl/rv32.py -o \
     -path \*/rtl/uart/\* -o \
+    -path \*/rtl/isa\*.py -o \
     -false \
 \)
 
