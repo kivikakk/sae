@@ -10,6 +10,9 @@ from .isa import ISA
 
 __all__ = ["RV32I", "RV32IC"]
 
+_immsingle = re.compile(r"\Aimm(\d+)\Z")
+_immmulti = re.compile(r"\Aimm(\d+)_(\d+)\Z")
+
 
 class RV32I(ISA):
     class Opcode(IntEnum, shape=7):
@@ -85,22 +88,36 @@ class RV32I(ISA):
             after,
             remlen,
             functn=re.compile(r"\Afunct(\d+)\Z"),
-            immsingle=re.compile(r"\Aimm(\d+)\Z"),
-            immmulti=re.compile(r"\Aimm(\d+)_(\d+)\Z"),
         ):
             if m := functn.match(name):
                 return unsigned(int(m[1]))
             if name == "imm":
                 assert not after, "don't know how to deal with non-last imm"
                 return unsigned(remlen)
-            if m := immmulti.match(name):
+            if m := _immmulti.match(name):
                 top = int(m[1])
                 bottom = int(m[2])
                 assert top > bottom, "immY_X format maps to imm[Y:X], Y must be > X"
                 return unsigned(top - bottom + 1)
-            if m := immsingle.match(name):
+            if m := _immsingle.match(name):
                 return unsigned(1)
             assert False, f"unhandled: {name!r}"
+
+        @classmethod
+        @property
+        def imm_xfrm(cls):
+            def imm_xfrm(imm):
+                kwargs = {}
+                for n in cls.layout:
+                    if m := _immsingle.match(n):
+                        kwargs[n] = (imm >> int(m[1])) & 1
+                    elif m := _immmulti.match(n):
+                        top = int(m[1])
+                        bottom = int(m[2])
+                        kwargs[n] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
+                return kwargs
+
+            return imm_xfrm
 
     class R(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
@@ -165,7 +182,6 @@ class RV32I(ISA):
         def shamt_xfrm(shamt, *, imm11_5=0):
             assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
             return {"imm": (imm11_5 << 5) | shamt}
-
 
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
@@ -265,10 +281,6 @@ class RV32I(ISA):
             SH = 0b001
             SW = 0b010
 
-        @staticmethod
-        def imm_xfrm(imm):
-            return {"imm4_0": imm & 0x1F, "imm11_5": imm >> 5}
-
     _store = S.xfrm(rs1off_xfrm).xfrm(S.imm_xfrm)
     SB = _store.partial(funct3=S.Funct.SB)
     SH = _store.partial(funct3=S.Funct.SH)
@@ -294,15 +306,6 @@ class RV32I(ISA):
             BGE = 0b101
             BLTU = 0b110
             BGEU = 0b111
-
-        @staticmethod
-        def imm_xfrm(imm):
-            return {
-                "imm4_1": (imm >> 1) & 0xF,
-                "imm10_5": (imm >> 5) & 0x3FF,
-                "imm11": (imm >> 11) & 1,
-                "imm12": (imm >> 12) & 1,
-            }
 
     _branch = B.xfrm(B.imm_xfrm)
     BEQ = _branch.partial(funct3=B.Funct.BEQ)
@@ -330,15 +333,6 @@ class RV32I(ISA):
     class J(IL):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
         values = {"opcode": "JAL"}
-
-        @staticmethod
-        def imm_xfrm(imm):
-            return {
-                "imm10_1": (imm >> 1) & 0x3FF,
-                "imm11": (imm >> 11) & 1,
-                "imm19_12": (imm >> 12) & 0xFF,
-                "imm20": imm >> 20,
-            }
 
     JAL = J.xfrm(J.imm_xfrm)
     J_ = JAL.partial(rd="zero")  # XXX uhm.

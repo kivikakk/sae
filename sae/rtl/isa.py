@@ -273,7 +273,7 @@ class ISA(metaclass=ISAMeta):
 
         def xfrm(self, xfn, **kwarg_defaults):
             clone = self.clone()
-            parameters = inspect.signature(xfn).parameters
+            parameters = getattr(xfn, "parameters", inspect.signature(xfn).parameters)
 
             @wraps(xfn)
             def pipe(kwargs):
