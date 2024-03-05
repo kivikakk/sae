@@ -6,12 +6,15 @@ from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator
 
 from sae.rtl.hart import AccessWidth, Hart, State
-from sae.rtl.rv32 import Reg, disasm
+from sae.rtl.isa_rv32 import RV32I
+from sae.rtl.rv32 import disasm
 from sae.targets import test
 
 __all__ = ["run_until_fault", "print_mmu"]
 
 SYSMEM_TO_SHOW = 8
+
+Reg = RV32I.Reg
 
 
 @singledispatch
@@ -61,7 +64,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                     v = ctx.get(hart.xmem.data[i])
                     if i in written or v:
                         written.add(i)
-                        rn = Reg[f"X{i}"].friendly
+                        rn = Reg(f"x{i}").friendly
                         print(f"  {rn}={ctx.get(hart.xmem.data[i]):08x}", end="")
                 print()
                 print_mmu(ctx, hart.mmu, prefix="  ")
@@ -70,7 +73,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
         results["pc"] = ctx.get(hart.pc)
         for i in range(1, 32):
             if not hart.track_reg_written or ctx.get(hart.xreg_written[i]):
-                results[Reg[f"X{i}"]] = ctx.get(hart.xmem.data[i])
+                results[Reg(f"x{i}")] = ctx.get(hart.xmem.data[i])
         results["faultcode"] = ctx.get(hart.fault_code)
         results["faultinsn"] = ctx.get(hart.fault_insn)
         if uart_recv:

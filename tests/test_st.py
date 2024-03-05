@@ -10,9 +10,11 @@ from amaranth.lib.memory import Memory
 
 from sae import st
 from sae.rtl.hart import FaultCode, Hart
-from sae.rtl.rv32 import INSNS, ISA, Reg
+from sae.rtl.isa_rv32 import RV32I
 
 from .test_utils import run_until_fault
+
+Reg = RV32I.Reg
 
 
 class StError(RuntimeError):
@@ -61,12 +63,12 @@ def translate_arg(arg, name):
         return arg
     elif name in ("pred", "succ"):
         return arg
-    raise RuntimeError(f"arg weh {name!r} = {arg!r}")
+    assert False, f"arg weh {name!r} = {arg!r}"
 
 
 @translate_arg.register(list)
 def translate_arg_list(args, names):
-    return [translate_arg(arg, name) for arg, name in zip(args, names)]
+    return {name: translate_arg(arg, name) for arg, name in zip(args, names)}
 
 
 class UnwrittenClass:
@@ -78,7 +80,6 @@ Unwritten = UnwrittenClass()
 
 
 class StTestCase(unittest.TestCase):
-    _isa: ISA
     _reg_inits: dict[str | Reg, Any]
     _body: list[int]
     _rest_unwritten: bool = False
@@ -96,14 +97,10 @@ class StTestCase(unittest.TestCase):
             assert name.startswith("test_"), f"what do i do with {name!r}?"
             setattr(cls, name, lambda self, body=body: cls.st_runner(self, body))
 
-    def init_st(self, args, *, isa=ISA.RVI, body=None):
+    def init_st(self, args, *, body=None):
         self.fish_st()
 
-        self._isa = ISA.RVI
         self._reg_inits, rest = parse_pairs(args, allow_atoms=True)
-        if "rvc" in rest:
-            self._isa = ISA.RVC
-            rest.remove("rvc")
         assert not rest, "remaining init args"
         self._body = body or []
         self._rest_unwritten = True
@@ -116,12 +113,17 @@ class StTestCase(unittest.TestCase):
                     case st.Pragma(kind="init", args=args):
                         self.init_st(args)
                     case st.Op(opcode=opcode, args=args):
-                        insn = INSNS[opcode]
-                        args = translate_arg(args, inspect.signature(insn).parameters)
-                        ops = insn(*args)
+                        insn = getattr(RV32I, opcode.upper().replace('.', '_'))
+                        parameters = list(insn.layout)
+                        for arg in insn.args_for():
+                            parameters.remove(arg)
+                        args = translate_arg(args, parameters)
+                        ops = insn(**args)
                         if not isinstance(ops, list):
                             ops = [ops]
-                        self._body.extend(ops)
+                        for op in ops:
+                            self._body.append(op & 0xFFFF)
+                            self._body.append(op >> 16)
                     case st.Pragma(kind="assert", args=args) | st.Pragma(
                         kind="assert~", args=args
                     ):

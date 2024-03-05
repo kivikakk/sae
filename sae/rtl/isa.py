@@ -89,12 +89,20 @@ class ISA(metaclass=ISAMeta):
 
             return cls
 
-        def __call__(cls, **kwargs):
-            # Can't check for "shape" because this ain't finalised yet.
-            if not hasattr(cls, "layout"):
-                raise TypeError(f"'{cls.__fullname__}' called, but it's layoutless.")
+        def __call__(cls, *args, **kwargs):
+            match args:
+                case ():
+                    # Can't check for "shape" because this ain't finalised yet.
+                    if not hasattr(cls, "layout"):
+                        raise TypeError(f"'{cls.__fullname__}' called, but it's layoutless.")
 
-            return ISA.IThunk(cls, kwargs)
+                    return ISA.IThunk(cls, kwargs)
+
+                case [sig]:
+                    return cls.shape(sig)
+
+                case _:
+                    assert False
 
         @property
         def __fullname__(self):
@@ -208,12 +216,13 @@ class ISA(metaclass=ISAMeta):
         pass
 
     class IThunk:
-        def __init__(self, ilcls, kwargs, *, xfrms=None):
+        def __init__(self, ilcls, kwargs):
             self.ilcls = ilcls
+            self.layout = ilcls.layout
             self.kwargs = kwargs
             self._needs_named = True
             self.__fullname__ = f"{ilcls.__fullname__} child"
-            self.xfrms = xfrms or []
+            self.xfrms = []
 
             for name in kwargs:
                 if name not in ilcls.layout:
@@ -227,7 +236,7 @@ class ISA(metaclass=ISAMeta):
                         f"and cannot be overridden."
                     )
 
-        def __call__(self, **kwargs):
+        def args_for(self, **kwargs):
             combined = self.do_xfrms(self.kwargs | kwargs)
             for name in combined:
                 if name not in self.ilcls.layout:
@@ -245,12 +254,14 @@ class ISA(metaclass=ISAMeta):
                         f"and cannot be overridden in thunk."
                     )
 
-            args = {
+            return {
                 **self.ilcls.values,
                 **self.ilcls.defaults,
                 **self.ilcls.resolve_values(combined),
             }
 
+        def __call__(self, **kwargs):
+            args = self.args_for(**kwargs)
             if len(args) < len(self.ilcls.layout):
                 missing = list(self.ilcls.layout)
                 for name in args:
@@ -263,7 +274,9 @@ class ISA(metaclass=ISAMeta):
             return self.ilcls.shape.const(args).as_value().value
 
         def clone(self):
-            return ISA.IThunk(self.ilcls, self.kwargs.copy(), xfrms=self.xfrms.copy())
+            clone = ISA.IThunk(self.ilcls, self.kwargs.copy())
+            clone.xfrms = self.xfrms.copy()
+            return clone
 
         def partial(self, **kwargs):
             # Note that overwriting defaults is allowed in partial().
