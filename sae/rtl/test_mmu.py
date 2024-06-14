@@ -4,11 +4,12 @@ from functools import partial
 from amaranth import Fragment
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
-from rainhdx import Platform
 
+from ..targets import test
 from .mmu import MMU, AccessWidth
 
 SYSMEM_TO_SHOW = 8
+
 
 def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
@@ -68,7 +69,7 @@ class TestBase:
             ticks += 1
 
         def bench(*, mmu, _mr, _mw):
-            assert((yield mmu.read.rdy))
+            assert ((yield mmu.read.rdy))
             yield mmu.read.addr.eq(addr)
             yield mmu.read.width.eq(width)
             yield mmu.read.ack.eq(1)
@@ -115,7 +116,7 @@ class TestBase:
 class TestMMU(unittest.TestCase, TestBase):
     def simTestbench(self, bench, init):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
-        sim = Simulator(Fragment.get(mmu, platform=Platform["test"]))
+        sim = Simulator(Fragment.get(mmu, platform=test()))
         sim.add_clock(1e-6)
         sim.add_testbench(partial(bench, mmu=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
         sim.run()

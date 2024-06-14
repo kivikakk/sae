@@ -4,8 +4,8 @@ from pathlib import Path
 from amaranth import Fragment, Memory
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
-from rainhdx import Platform
 
+from ..targets import test
 from . import Hart, State
 from .rv32 import Reg, disasm
 from .test_mmu import pms
@@ -83,7 +83,7 @@ def run_until_fault(hart, *, max_cycles=1000):
         if uart:
             results["uart"] = bytes(uart)
 
-    sim = Simulator(Fragment.get(hart, platform=Platform["test"]))
+    sim = Simulator(Fragment.get(hart, platform=test()))
     sim.add_clock(1e6)
     sim.add_testbench(bench)
     sim.run()

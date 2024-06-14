@@ -2,16 +2,40 @@ from itertools import islice
 from pathlib import Path
 from typing import Optional
 
-from amaranth import (Array, C, Cat, Elaboratable, Module, Mux, ResetInserter,
-                      Shape, Signal, signed)
+from amaranth import (
+    Array,
+    C,
+    Cat,
+    Elaboratable,
+    Module,
+    Mux,
+    ResetInserter,
+    Shape,
+    Signal,
+    signed,
+)
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 
 from . import rv32
 from .mmu import MMU, AccessWidth
-from .rv32 import (InsB, InsI, InsJ, InsR, InsS, InsU, OpBranchFunct, Opcode,
-                   OpImmFunct, OpLoadFunct, OpMiscMemFunct, OpRegFunct,
-                   OpStoreFunct, OpSystemFunct, Reg)
+from .rv32 import (
+    InsB,
+    InsI,
+    InsJ,
+    InsR,
+    InsS,
+    InsU,
+    OpBranchFunct,
+    Opcode,
+    OpImmFunct,
+    OpLoadFunct,
+    OpMiscMemFunct,
+    OpRegFunct,
+    OpStoreFunct,
+    OpSystemFunct,
+    Reg,
+)
 from .uart import UART
 
 __all__ = [
@@ -69,7 +93,7 @@ class Hart(Elaboratable):
 
     sysmem: Memory
     uart: UART
-    reg_inits: Optional[dict[str, int]]
+    reg_inits: dict[str, int]
     track_reg_written: bool
 
     state: Signal

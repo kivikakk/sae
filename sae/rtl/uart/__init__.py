@@ -28,7 +28,7 @@ class UART(Component):
     def elaborate(self, platform):
         m = Module()
 
-        if platform.simulation:
+        if getattr(platform, "simulation", False):
             # Blackboxed in tests.
             return m
 

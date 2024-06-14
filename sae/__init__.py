@@ -1,28 +1,12 @@
-import rainhdx
-from amaranth_boards.icebreaker import ICEBreakerPlatform
+import niar
 
-from . import formal, rtl
+from . import rtl
+from .targets import icebreaker
 
-__all__ = ["Sae", "icebreaker"]
+__all__ = ["Sae"]
 
 
-class Sae(rainhdx.Project):
+class Sae(niar.Project):
     name = "sae"
     top = rtl.Top
-    formal_top = formal.Top
-
-
-class icebreaker(ICEBreakerPlatform, rainhdx.Platform):
-    pass
-
-
-class plats:
-    class test(rainhdx.Platform):
-        simulation = True
-
-        @property
-        def default_clk_frequency(self):
-            return 1e6
-
-    class formal(test):
-        pass
+    targets = [icebreaker]

@@ -3,11 +3,11 @@ name = "sae"
 version = "0.0"
 description = ""
 authors = [
-    {name = "nimi", email = "correo"},
+    {name = "Asherah Connor", email = "ashe@kivikakk.ee"},
 ]
 dependencies = [
-    "amaranth >= 0.4.0dev0, < 0.6",
-    "rainhdx >= 0.1",
+    "amaranth >= 0.4.5, < 0.6",
+    "niar >= 0.1",
     "funcparserlib >= 1.0.1",
 ]
 requires-python = ">=3.8"
@@ -21,7 +21,3 @@ build = [
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
-
-[tool.mypy]
-disable_error_code = ["valid-type"]
-ignore_missing_imports = true
