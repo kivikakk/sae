@@ -134,10 +134,10 @@ class MMURead(Component):
                             (self.read.width == AccessWidth.BYTE)
                             & (self.read.addr == MMU.UART_OFFSET)
                         ):
-                            with m.If(self.uart.rd_rdy):
+                            with m.If(self.uart.rd.valid):
                                 m.d.sync += [
-                                    self.uart.rd_en.eq(1),
-                                    self.read.value.eq(self.uart.rd_data),
+                                    self.uart.rd.ready.eq(1),
+                                    self.read.value.eq(self.uart.rd.payload),
                                     valid.eq(1),
                                 ]
                                 m.next = "uart.dessert"
@@ -153,7 +153,7 @@ class MMURead(Component):
             if self.uart:
                 with m.State("uart.dessert"):
                     # may not need this state at all.
-                    m.d.sync += self.uart.rd_en.eq(0)
+                    m.d.sync += self.uart.rd.ready.eq(0)
                     m.next = "init"
 
             with m.State("pipe"):
@@ -246,7 +246,7 @@ class MMUWrite(Component):
 
         m.d.sync += self.write.rdy.eq(1)
         if self.uart:
-            m.d.sync += self.uart.wr_en.eq(0)
+            m.d.sync += self.uart.wr.valid.eq(0)
 
         with m.FSM():
             with m.State("init"):
@@ -263,8 +263,8 @@ class MMUWrite(Component):
                             if self.uart:
                                 with m.If(self.write.addr == MMU.UART_OFFSET):
                                     m.d.sync += [
-                                        self.uart.wr_data.eq(self.write.data[:8]),
-                                        self.uart.wr_en.eq(1),
+                                        self.uart.wr.payload.eq(self.write.data[:8]),
+                                        self.uart.wr.valid.eq(1),
                                         self.port.en.eq(0),
                                     ]
 

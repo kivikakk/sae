@@ -17,7 +17,7 @@ from amaranth import (
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.memory import Memory
 
-from . import rv32
+from ..targets import icebreaker
 from .mmu import MMU, AccessWidth
 from .rv32 import (
     InsB,
@@ -68,8 +68,6 @@ class Top(Elaboratable):
         self.hart = Hart(*args, **kwargs)
 
     def elaborate(self, platform):
-        from .. import icebreaker
-
         m = Module()
 
         rst = Signal()
@@ -108,7 +106,8 @@ class Hart(Elaboratable):
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
-            Path(__file__).parent / "test_shrimprw.bin", memory=8192
+            Path(__file__).parent.parent.parent / "tests" / "test_shrimprw.bin",
+            memory=8192,
         )
         self.reg_inits = reg_inits or {}
         if Reg.X1 not in self.reg_inits:
@@ -165,8 +164,6 @@ class Hart(Elaboratable):
         return v
 
     def elaborate(self, platform):
-        from .. import icebreaker
-
         m = Module()
 
         match platform:

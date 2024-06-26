@@ -1,4 +1,5 @@
 from amaranth import Module
+from amaranth.lib import stream
 from amaranth.lib.fifo import SyncFIFOBuffered
 from amaranth.lib.io import Pin
 from amaranth.lib.wiring import Component, In, Out
@@ -8,12 +9,8 @@ __all__ = ["UART"]
 
 
 class UART(Component):
-    wr_data: In(8)
-    wr_en: In(1)
-
-    rd_rdy: Out(1)
-    rd_en: In(1)
-    rd_data: Out(8)
+    wr: In(stream.Signature(8))
+    rd: Out(stream.Signature(8))
 
     _plat_uart: Pin
     _baud: int
@@ -42,8 +39,8 @@ class UART(Component):
         # tx
         m.submodules.tx_fifo = self._tx_fifo = SyncFIFOBuffered(width=8, depth=32)
         m.d.comb += [
-            self._tx_fifo.w_data.eq(self.wr_data),
-            self._tx_fifo.w_en.eq(self.wr_en),
+            self._tx_fifo.w_data.eq(self.wr.payload),
+            self._tx_fifo.w_en.eq(self.wr.valid),
         ]
         with m.FSM() as fsm:
             with m.State("idle"):
@@ -62,9 +59,9 @@ class UART(Component):
         # rx
         m.submodules.rx_fifo = self._rx_fifo = SyncFIFOBuffered(width=8, depth=32)
         m.d.comb += [
-            self.rd_rdy.eq(self._rx_fifo.r_rdy),
-            self.rd_data.eq(self._rx_fifo.r_data),
-            self._rx_fifo.r_en.eq(self.rd_en),
+            self.rd.valid.eq(self._rx_fifo.r_rdy),
+            self.rd.payload.eq(self._rx_fifo.r_data),
+            self._rx_fifo.r_en.eq(self.rd.ready),
         ]
         with m.FSM() as fsm:
             with m.State("idle"):

@@ -15,14 +15,14 @@ __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]
 
 
 @singledispatch
-def run_until_fault(hart, *, max_cycles=1000):
+def run_until_fault(hart: Hart, *, max_cycles=1000):
     results = {}
 
-    def bench():
+    async def bench(ctx):
         uart_buffer = (hart.reg_inits or {}).get("uart")
         if uart_buffer:
-            yield hart.uart.rd_rdy.eq(1)
-            yield hart.uart.rd_data.eq(uart_buffer[0])
+            ctx.set(hart.uart.rd.valid, 1)
+            ctx.set(hart.uart.rd.payload, uart_buffer[0])
             uart_buffer = uart_buffer[1:]
 
         nonlocal results
@@ -30,44 +30,45 @@ def run_until_fault(hart, *, max_cycles=1000):
         cycles = -1
         written = set()
         uart = bytearray()
-        while State.RUNNING == (yield hart.state):
+        while State.RUNNING == ctx.get(hart.state):
             if first:
                 first = False
             else:
-                yield Tick()
-            if (yield hart.uart.wr_en):
-                datum = yield hart.uart.wr_data
+                await ctx.tick()
+            if ctx.get(hart.uart.wr.valid):
+                datum = ctx.get(hart.uart.wr.payload)
                 print(f"core wrote to UART: 0x{datum:0>2x} '{datum:c}'")
                 uart.append(datum)
-            if (yield hart.uart.rd_en):
+            if ctx.get(hart.uart.rd.ready):
                 if uart_buffer:
                     print(
                         f"core read from UART: 0x{uart_buffer[0]:0>2x} '{uart_buffer[0]:c}'"
                     )
-                    yield hart.uart.rd_data.eq(uart_buffer[0])
+                    ctx.set(hart.uart.rd.payload, uart_buffer[0])
                     uart_buffer = uart_buffer[1:]
                 else:
                     print("core read from empty UART")
-                    yield hart.uart.rd_data.eq(0)
-                    yield hart.uart.rd_rdy.eq(0)
+                    ctx.set(hart.uart.rd.payload, 0)
+                    ctx.set(hart.uart.rd.valid, 0)
 
-            if (yield hart.resolving):
+            if ctx.get(hart.resolving):
                 if cycles == max_cycles:
                     raise RuntimeError("max cycles reached")
                 cycles += 1
-                insn = yield hart.insn
+                insn = ctx.get(hart.insn)
                 print(
-                    f"pc={(yield hart.pc):08x} [{insn:0>8x}]  {disasm(insn):<20}",
+                    f"pc={ctx.get(hart.pc):08x} [{insn:0>8x}]  {disasm(insn):<20}",
                     end="",
                 )
                 for i in range(1, 32):
-                    v = yield hart.xreg[i]
+                    v = ctx.get(hart.xreg[i])
                     if i in written or v:
                         written.add(i)
                         rn = Reg[f"X{i}"].friendly
-                        print(f"  {rn}={(yield hart.xreg[i]):08x}", end="")
+                        print(f"  {rn}={ctx.get(hart.xreg[i]):08x}", end="")
                 print()
-                yield from pms(
+                pms(
+                    ctx,
                     mr=hart.mmu.mmu_read,
                     mw=hart.mmu.mmu_write,
                     sysmem=hart.sysmem,
@@ -75,12 +76,12 @@ def run_until_fault(hart, *, max_cycles=1000):
                 )
                 print()
 
-        results["pc"] = yield hart.pc
+        results["pc"] = ctx.get(hart.pc)
         for i in range(1, 32):
-            if not hart.track_reg_written or (yield hart.xreg_written[i]):
-                results[Reg[f"X{i}"]] = yield hart.xreg[i]
-        results["faultcode"] = yield hart.fault_code
-        results["faultinsn"] = yield hart.fault_insn
+            if not hart.track_reg_written or ctx.get(hart.xreg_written[i]):
+                results[Reg[f"X{i}"]] = ctx.get(hart.xreg[i])
+        results["faultcode"] = ctx.get(hart.fault_code)
+        results["faultinsn"] = ctx.get(hart.fault_insn)
         if uart:
             results["uart"] = bytes(uart)
 

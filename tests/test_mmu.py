@@ -11,54 +11,62 @@ from sae.targets import test
 SYSMEM_TO_SHOW = 8
 
 
-def pms(*, mr=None, mw=None, sysmem=None, prefix=""):
+def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
         print(
             f"{prefix}MR: "
-            f"a={(yield mr.read.addr):0>8x}  w={AccessWidth((yield mr.read.width))}  "
-            f"v={(yield mr.read.value):0>8x}  v={(yield mr.read.valid):b}        ",
+            f"a={ctx.get(mr.read.addr):0>8x}  w={AccessWidth(ctx.get(mr.read.width))}  "
+            f"v={ctx.get(mr.read.value):0>8x}  v={ctx.get(mr.read.valid):b}        ",
             end="",
         )
         if sysmem:
             print("data=", end="")
             for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
+                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
         print()
     if mw:
         print(
             f"{prefix}MW: "
-            f"a={(yield mw.write.addr):0>8x}  w={AccessWidth((yield mw.write.width))}  "
-            f"d={(yield mw.write.data):0>8x}  r={(yield mw.write.rdy):b}  a={(yield mw.write.ack):b}   ",
+            f"a={ctx.get(mw.write.addr):0>8x}  w={AccessWidth(ctx.get(mw.write.width))}  "
+            f"d={ctx.get(mw.write.data):0>8x}  r={ctx.get(mw.write.rdy):b}  a={ctx.get(mw.write.ack):b}   ",
             end="",
         )
         if sysmem and not mr:
             print("data=", end="")
             for i in range(min(SYSMEM_TO_SHOW, sysmem.depth)):
-                print(f"{(yield sysmem[i]):0>4x} ", end="")
+                print(f"{ctx.get(sysmem.data[i]):0>4x} ", end="")
         print()
 
 
 class TestBase:
-    def waitFor(self, s, *, change_to, ticks, mr=None, mw=None, sysmem=None):
+    async def waitFor(self, ctx, s, *, change_to, ticks, mr=None, mw=None, sysmem=None):
         for i in range(ticks):
             if mr or mw:
-                yield from pms(
-                    mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({i}/{ticks}) -- "
+                pms(
+                    ctx,
+                    mr=mr,
+                    mw=mw,
+                    sysmem=sysmem,
+                    prefix=f"  waitFor ({i}/{ticks}) -- ",
                 )
             self.assertNotEqual(
                 change_to,
-                (yield s),
-                f"{s} changed to {change_to} after {i} tick(s) (out of {ticks})",
+                ctx.get(s),
+                f"{s.name} changed to {change_to} after {i} tick(s) (out of {ticks})",
             )
-            yield Tick()
+            await ctx.tick()
         self.assertEqual(
             change_to,
-            (yield s),
-            f"{s} didn't change to {change_to} after {ticks} tick(s)",
+            ctx.get(s),
+            f"{s.name} didn't change to {change_to} after {ticks} tick(s)",
         )
         if mr or mw:
-            yield from pms(
-                mr=mr, mw=mw, sysmem=sysmem, prefix=f"  waitFor ({ticks}/{ticks}) -- "
+            pms(
+                ctx,
+                mr=mr,
+                mw=mw,
+                sysmem=sysmem,
+                prefix=f"  waitFor ({ticks}/{ticks}) -- ",
             )
 
     def assertRead(self, addr, width, value, mem):
@@ -68,17 +76,22 @@ class TestBase:
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, mmu, _mr, _mw):
-            assert ((yield mmu.read.rdy))
-            yield mmu.read.addr.eq(addr)
-            yield mmu.read.width.eq(width)
-            yield mmu.read.ack.eq(1)
-            yield Tick()
-            yield mmu.read.ack.eq(0)
-            yield from self.waitFor(
-                mmu.read.valid, change_to=1, ticks=ticks, mr=_mr, sysmem=mmu.sysmem
+        async def bench(ctx, *, mmu, mr, mw):
+            assert ctx.get(mmu.read.rdy)
+            ctx.set(mmu.read.addr, addr)
+            ctx.set(mmu.read.width, width)
+            ctx.set(mmu.read.ack, 1)
+            await ctx.tick()
+            ctx.set(mmu.read.ack, 0)
+            await self.waitFor(
+                ctx,
+                mmu.read.valid,
+                change_to=1,
+                ticks=ticks,
+                mr=mr,
+                sysmem=mmu.sysmem,
             )
-            self.assertEqual(value, (yield mmu.read.value))
+            self.assertEqual(value, ctx.get(mmu.read.value))
 
         self.simTestbench(bench, mem)
 
@@ -89,25 +102,30 @@ class TestBase:
         if width == AccessWidth.WORD:
             ticks += 1
 
-        def bench(*, mmu, _mw, _mr):
-            yield mmu.write.width.eq(width)
-            yield mmu.write.addr.eq(addr)
-            yield mmu.write.data.eq(value)
-            yield from self.waitFor(
-                mmu.write.rdy, change_to=1, ticks=1, mw=_mw, sysmem=mmu.sysmem
+        async def bench(ctx, *, mmu, mw, mr):
+            ctx.set(mmu.write.width, width)
+            ctx.set(mmu.write.addr, addr)
+            ctx.set(mmu.write.data, value)
+            await self.waitFor(
+                ctx, mmu.write.rdy, change_to=1, ticks=1, mw=mw, sysmem=mmu.sysmem
             )
-            yield mmu.write.ack.eq(1)
-            yield Tick()
-            yield mmu.write.ack.eq(0)
-            yield from self.waitFor(
-                mmu.write.rdy, change_to=1, ticks=ticks, mw=_mw, sysmem=mmu.sysmem
+            ctx.set(mmu.write.ack, 1)
+            await ctx.tick()
+            ctx.set(mmu.write.ack, 0)
+            await self.waitFor(
+                ctx,
+                mmu.write.rdy,
+                change_to=1,
+                ticks=ticks,
+                mw=mw,
+                sysmem=mmu.sysmem,
             )
-            yield Tick()
-            for i, (ex, s) in enumerate(zip(omem, mmu.sysmem)):
+            await ctx.tick()
+            for i, (ex, s) in enumerate(zip(omem, mmu.sysmem.data)):
                 self.assertEqual(
                     ex,
-                    (yield s),
-                    f"failed at index {i}: omem {ex:0>4x} != sysmem {(yield s):0>4x}",
+                    ctx.get(s),
+                    f"failed at index {i}: omem {ex:0>4x} != sysmem {ctx.get(s):0>4x}",
                 )
 
         self.simTestbench(bench, imem)
@@ -118,7 +136,7 @@ class TestMMU(unittest.TestCase, TestBase):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(Fragment.get(mmu, platform=test()))
         sim.add_clock(1e-6)
-        sim.add_testbench(partial(bench, mmu=mmu, _mr=mmu.mmu_read, _mw=mmu.mmu_write))
+        sim.add_testbench(partial(bench, mmu=mmu, mr=mmu.mmu_read, mw=mmu.mmu_write))
         sim.run()
 
     def test_read(self):
