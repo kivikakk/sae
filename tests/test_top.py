@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 
-from sae.rtl import FaultCode
+from sae.rtl.hart import FaultCode
 from sae.rtl.rv32 import Reg
 
 from .test_utils import run_until_fault

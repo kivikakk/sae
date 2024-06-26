@@ -3,6 +3,7 @@
 ## µ-architecture
 
 * Separate ALU, try to make this thing smaller and build faster.
+  * This implies making the design pipelined! OK.
 
 ## ISA
 

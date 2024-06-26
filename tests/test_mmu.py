@@ -3,7 +3,7 @@ from functools import partial
 
 from amaranth import Fragment
 from amaranth.lib.memory import Memory
-from amaranth.sim import Simulator, Tick
+from amaranth.sim import Simulator
 
 from sae.rtl.mmu import MMU, AccessWidth
 from sae.targets import test

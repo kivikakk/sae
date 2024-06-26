@@ -3,9 +3,9 @@ from pathlib import Path
 
 from amaranth import Fragment
 from amaranth.lib.memory import Memory
-from amaranth.sim import Simulator, Tick
+from amaranth.sim import Simulator
 
-from sae.rtl import Hart, State
+from sae.rtl.hart import Hart, State
 from sae.rtl.rv32 import Reg, disasm
 from sae.targets import test
 

@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from sae import st
-from sae.rtl import FaultCode, Hart
+from sae.rtl.hart import FaultCode, Hart
 from sae.rtl.rv32 import INSNS, Reg
 
 from .test_utils import InsnTestHelpers, Unwritten
