@@ -11,7 +11,7 @@ from .uart import UART
 __all__ = ["MMU", "AccessWidth"]
 
 
-class AccessWidth(IntEnum, shape=2):  # type: ignore
+class AccessWidth(IntEnum, shape=2):
     BYTE = 0
     HALF = 1
     WORD = 2

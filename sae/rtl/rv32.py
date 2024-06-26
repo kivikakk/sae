@@ -175,17 +175,17 @@ class OpLoadFunct(IntEnum, shape=3):
     LHU = 0b101
 
 
-class OpStoreFunct(IntEnum, shape=3):  # type: ignore
+class OpStoreFunct(IntEnum, shape=3):
     SB = 0b000
     SH = 0b001
     SW = 0b010
 
 
-class OpMiscMemFunct(IntEnum, shape=3):  # type: ignore
+class OpMiscMemFunct(IntEnum, shape=3):
     FENCE = 0b000
 
 
-class OpSystemFunct(IntEnum, shape=15):  # type: ignore
+class OpSystemFunct(IntEnum, shape=15):
     ECALL = 0b000000000000000
     EBREAK = 0b000000000001000
 
@@ -584,7 +584,13 @@ def disasm(op):
             match funct:
                 case OpImmFunct.ADDI | OpImmFunct.SLTI:
                     return f"{funct.name.lower()} x{v_i['rd']}, x{v_i['rs1']}, {c2foff(12, v_i['imm'])}"
-                case OpImmFunct.SLTIU | OpImmFunct.ANDI | OpImmFunct.ORI | OpImmFunct.XORI | OpImmFunct.SLLI:
+                case (
+                    OpImmFunct.SLTIU
+                    | OpImmFunct.ANDI
+                    | OpImmFunct.ORI
+                    | OpImmFunct.XORI
+                    | OpImmFunct.SLLI
+                ):
                     return f"{funct.name.lower()} x{v_i['rd']}, x{v_i['rs1']}, 0x{v_i['imm']:x}"
                 case OpImmFunct.SRI:
                     opc = "srai" if (v_i["imm"] >> 10) & 1 else "srli"
@@ -597,7 +603,14 @@ def disasm(op):
                 case OpRegFunct.ADDSUB:
                     opc = "sub" if (v_r["funct7"] >> 5) & 1 else "add"
                     return f"{opc} x{v_r['rd']}, x{v_r['rs1']}, x{v_r['rs2']}"
-                case OpRegFunct.SLT | OpRegFunct.SLTU | OpRegFunct.AND | OpRegFunct.OR | OpRegFunct.XOR | OpRegFunct.SLL:
+                case (
+                    OpRegFunct.SLT
+                    | OpRegFunct.SLTU
+                    | OpRegFunct.AND
+                    | OpRegFunct.OR
+                    | OpRegFunct.XOR
+                    | OpRegFunct.SLL
+                ):
                     return f"{funct.name.lower()} x{v_r['rd']}, x{v_r['rs1']}, x{v_r['rs2']}"
                 case OpRegFunct.SR:
                     opc = "sra" if (v_r["funct7"] >> 5) & 1 else "srl"
@@ -628,8 +641,8 @@ def disasm(op):
                 return f"j {c2foff(21, imm)}"
             return f"jal x{v_j['rd']}, {c2foff(21, imm)}"
         case Opcode.SYSTEM:
-            if v_i['funct3'] == 0:
-                funct = OpSystemFunct(v_i['imm'] << 3)
+            if v_i["funct3"] == 0:
+                funct = OpSystemFunct(v_i["imm"] << 3)
                 return funct.name.lower()
         case 0x00:
             if op & 0xFFFF == 0:

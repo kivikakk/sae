@@ -150,4 +150,4 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
 TEST_REPLACEMENT = re.compile(r"(?:\A|[^a-zA-Z]+)[a-zA-Z]")
 for test_file in Path(__file__).parent.glob("test_*.st"):
     name = TEST_REPLACEMENT.sub(lambda t: t[0][-1].upper(), Path(test_file).name)
-    globals()[name] = type(StTestCase)(name, (StTestCase,), {"filename": test_file})  # type: ignore
+    globals()[name] = type(StTestCase)(name, (StTestCase,), {"filename": test_file})

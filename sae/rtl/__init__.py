@@ -46,7 +46,7 @@ __all__ = [
 ]
 
 
-class State(IntEnum, shape=1):  # type: ignore
+class State(IntEnum, shape=1):
     RUNNING = 0
     FAULTED = 1
 
@@ -57,7 +57,7 @@ class FaultCode(IntEnum):
     PC_MISALIGNED = 2
 
 
-class LsSize(IntEnum, shape=2):  # type: ignore
+class LsSize(IntEnum, shape=2):
     B = 0
     H = 1
     W = 2
