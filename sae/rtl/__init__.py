@@ -57,12 +57,6 @@ class FaultCode(IntEnum):
     PC_MISALIGNED = 2
 
 
-class LsSize(IntEnum, shape=2):
-    B = 0
-    H = 1
-    W = 2
-
-
 class Top(Elaboratable):
     def __init__(self, *args, **kwargs):
         self.hart = Hart(*args, **kwargs)
