@@ -3,9 +3,7 @@ from amaranth import Elaboratable, Module, ResetInserter, Signal
 from ..targets import icebreaker
 from .hart import Hart
 
-__all__ = [
-    "Top",
-]
+__all__ = ["Top"]
 
 
 class Top(Elaboratable):

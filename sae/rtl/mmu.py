@@ -1,8 +1,8 @@
 from typing import Optional
 
 from amaranth import C, Cat, Module, Mux, Shape, Signal
+from amaranth.lib import memory
 from amaranth.lib.enum import IntEnum
-from amaranth.lib.memory import Memory, ReadPort, WritePort
 from amaranth.lib.wiring import Component, In, Out, Signature, connect
 from amaranth.utils import ceil_log2
 
@@ -19,29 +19,25 @@ class AccessWidth(IntEnum, shape=2):
 
 class MMUReadBusSignature(Signature):
     def __init__(self, addr_width, data_width):
-        super().__init__(
-            {
-                "addr": In(addr_width),
-                "width": In(AccessWidth),
-                "ack": In(1),
-                "rdy": Out(1),
-                "value": Out(data_width),
-                "valid": Out(1),
-            }
-        )
+        super().__init__({
+            "addr": In(addr_width),
+            "width": In(AccessWidth),
+            "ack": In(1),
+            "rdy": Out(1),
+            "value": Out(data_width),
+            "valid": Out(1),
+        })
 
 
 class MMUWriteBusSignature(Signature):
     def __init__(self, addr_width, data_width):
-        super().__init__(
-            {
-                "addr": In(addr_width),
-                "width": In(AccessWidth),
-                "data": In(data_width),
-                "ack": In(1),
-                "rdy": Out(1),
-            }
-        )
+        super().__init__({
+            "addr": In(addr_width),
+            "width": In(AccessWidth),
+            "data": In(data_width),
+            "ack": In(1),
+            "rdy": Out(1),
+        })
 
 
 class MMU(Component):
@@ -51,7 +47,7 @@ class MMU(Component):
     write: In(MMUWriteBusSignature(32, 32))
     mmu_read: "MMURead"
     mmu_write: "MMUWrite"
-    sysmem: Memory
+    sysmem: memory.Memory
     uart: Optional[UART]
 
     def __init__(self, *, sysmem, uart=None):
@@ -64,15 +60,11 @@ class MMU(Component):
         m = Module()
 
         m.submodules.sysmem = sysmem = self.sysmem
-        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(
-            sysmem=sysmem, uart=self.uart
-        )
+        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem, uart=self.uart)
         connect(m, self.read, mmu_read.read)
         connect(m, sysmem.read_port(), mmu_read.port)
 
-        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(
-            sysmem=sysmem, uart=self.uart
-        )
+        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem, uart=self.uart)
         connect(m, self.write, mmu_write.write)
         connect(m, sysmem.write_port(granularity=8), mmu_write.port)
 
@@ -83,16 +75,12 @@ class MMURead(Component):
     uart: Optional[UART]
 
     def __init__(self, *, sysmem, uart=None):
-        super().__init__(
-            {
-                "read": Out(MMUReadBusSignature(32, 32)),
-                "port": In(
-                    ReadPort.Signature(
-                        addr_width=ceil_log2(sysmem.depth), shape=sysmem.shape
-                    )
-                ),
-            }
-        )
+        super().__init__({
+            "read": Out(MMUReadBusSignature(32, 32)),
+            "port": In(memory.ReadPort.Signature(
+                addr_width=ceil_log2(sysmem.depth), shape=sysmem.shape
+            )),
+        })
         self.uart = uart
 
     def elaborate(self, platform):
@@ -144,9 +132,7 @@ class MMURead(Component):
                             with m.Else():
                                 m.d.sync += [
                                     self.read.value.eq(0),
-                                    valid.eq(
-                                        1
-                                    ),  # ideally we actually identify there's nothing to read!
+                                    valid.eq(1),  # ideally we actually identify there's nothing to read!
                                 ]
                                 m.next = "uart.dessert"  # XXX probably unnecessary
 
@@ -193,9 +179,7 @@ class MMURead(Component):
                 with m.If(self.read.width == AccessWidth.HALF):
                     # unaligned half
                     m.d.sync += [
-                        self.read.value.eq(
-                            self.read.value[8:] | (self.port.data[:8] << 8)
-                        ),
+                        self.read.value.eq(self.read.value[8:] | (self.port.data[:8] << 8)),
                         valid.eq(1),
                     ]
                     m.next = "init"
@@ -208,9 +192,7 @@ class MMURead(Component):
                     m.next = "init"
                 with m.Else():
                     # unaligned word
-                    m.d.sync += self.read.value.eq(
-                        self.read.value[8:] | (self.port.data << 8)
-                    )
+                    m.d.sync += self.read.value.eq(self.read.value[8:] | (self.port.data << 8))
                     m.next = "coll2"
 
             with m.State("coll2"):
@@ -230,13 +212,11 @@ class MMUWrite(Component):
         super().__init__(
             {
                 "write": Out(MMUWriteBusSignature(32, 32)),
-                "port": In(
-                    WritePort.Signature(
-                        addr_width=ceil_log2(sysmem.depth),
-                        shape=sysmem.shape,
-                        granularity=8,
-                    )
-                ),
+                "port": In(memory.WritePort.Signature(
+                    addr_width=ceil_log2(sysmem.depth),
+                    shape=sysmem.shape,
+                    granularity=8,
+                )),
             }
         )
         self.uart = uart
@@ -299,9 +279,7 @@ class MMUWrite(Component):
                                 m.next = "word"
                             with m.Else():
                                 m.d.sync += [
-                                    self.port.data.eq(
-                                        Cat(C(0, 8), self.write.data[:8])
-                                    ),
+                                    self.port.data.eq(Cat(C(0, 8), self.write.data[:8])),
                                     self.port.en.eq(0b10),
                                 ]
                                 m.next = "word.unaligned"
