@@ -1,13 +1,14 @@
 from functools import singledispatch
 from pathlib import Path
 
-from amaranth import Fragment, Memory
+from amaranth import Fragment
 from amaranth.lib.memory import Memory
 from amaranth.sim import Simulator, Tick
 
-from ..targets import test
-from . import Hart, State
-from .rv32 import Reg, disasm
+from sae.rtl import Hart, State
+from sae.rtl.rv32 import Reg, disasm
+from sae.targets import test
+
 from .test_mmu import pms
 
 __all__ = ["run_until_fault", "Unwritten", "InsnTestHelpers"]

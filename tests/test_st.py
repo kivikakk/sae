@@ -6,9 +6,10 @@ from functools import singledispatchmethod
 from pathlib import Path
 from typing import Optional
 
-from .. import st
-from . import FaultCode, Hart
-from .rv32 import INSNS, Reg
+from sae import st
+from sae.rtl import FaultCode, Hart
+from sae.rtl.rv32 import INSNS, Reg
+
 from .test_utils import InsnTestHelpers, Unwritten
 
 
@@ -114,9 +115,12 @@ class StTestCase(InsnTestHelpers, unittest.TestCase):
                                 int(
                                     asserts.pop(
                                         "faultinsn",
-                                        "0xFFFFFFFF"
-                                        if faultcode == FaultCode.ILLEGAL_INSTRUCTION
-                                        else "0",
+                                        (
+                                            "0xFFFFFFFF"
+                                            if faultcode
+                                            == FaultCode.ILLEGAL_INSTRUCTION
+                                            else "0"
+                                        ),
                                     ),
                                     0,
                                 ),

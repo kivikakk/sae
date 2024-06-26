@@ -1,6 +1,11 @@
-ASFLAGS = -march=rv32ic -mabi=ilp32
-CFLAGS  = -march=rv32ic -mabi=ilp32 -O2
-LDFLAGS = -T linker.ld
+CC      = riscv64-unknown-elf-gcc
+LD      = riscv64-unknown-elf-ld
+AS      = riscv64-unknown-elf-as
+OBJCOPY = riscv64-unknown-elf-objcopy
+
+ASFLAGS = -march=rv32i -mabi=ilp32
+CFLAGS  = -march=rv32i -mabi=ilp32 -O2
+LDFLAGS = -m elf32lriscv -T linker.ld
 
 all: ../sae/rtl/test_shrimple.bin ../sae/rtl/test_shrimprw.bin
 
