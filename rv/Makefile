@@ -1,3 +1,4 @@
+# brew tap riscv-software-src/riscv; brew install riscv-tools
 CC      = riscv64-unknown-elf-gcc
 LD      = riscv64-unknown-elf-ld
 AS      = riscv64-unknown-elf-as
