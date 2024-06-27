@@ -1,0 +1,22 @@
+name: CXXRTL tests
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  cxxrtl-tests:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - uses: kivikakk/niar/setup-action@main
+
+    - name: Compile CXXRTL and run
+      run: python -m sae cxxrtl
