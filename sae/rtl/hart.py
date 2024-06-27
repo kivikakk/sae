@@ -125,7 +125,7 @@ class Hart(Elaboratable):
     def elaborate(self, platform):
         m = Module()
 
-        uart = self.uart = m.submodules.uart = UART(None)
+        uart = self.uart = m.submodules.uart = UART(self.plat_uart)
 
         self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem, uart=uart)
         m.d.sync += mmu.read.ack.eq(0)

@@ -20,3 +20,4 @@
 
 * BMC
 * Interface with sh1107/ili9341spi
+* CXXRTL test: e.g. verify the UART behaviour.
