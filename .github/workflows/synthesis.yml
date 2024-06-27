@@ -1,0 +1,35 @@
+name: Synthesis
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+
+jobs:
+  synthesis:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        board:
+        - icebreaker
+
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v4
+
+    - name: Install pip dependencies
+      run: pip install --editable .
+
+    - uses: kivikakk/niar/setup-action@main
+      with:
+        install-oss-cad-suite: true
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Elaborate and synthesise
+      run: python -m sae build -b ${{ matrix.board }}

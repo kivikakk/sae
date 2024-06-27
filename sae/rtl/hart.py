@@ -73,6 +73,8 @@ class Hart(Elaboratable):
             self.reg_inits[Reg.X1] = 0xFFFF_FFFF  # ensure RET faults
         self.track_reg_written = track_reg_written
 
+        self.plat_uart = None
+
         self.state = Signal(State)
         self.resolving = Signal()
         self.fault_code = Signal(FaultCode)
