@@ -1,47 +1,48 @@
-[2024-06-26 19:22:28,219] niar: INFO: building sae for icebreaker
-[2024-06-26 19:22:28,220] niar: DEBUG: starting elaboration
-[2024-06-26 19:22:28,447] niar: DEBUG: elaboration finished in 0:00:00.227018
-[2024-06-26 19:22:28,447] niar: DEBUG: 'sae.il': 432,408 bytes
-[2024-06-26 19:22:28,447] niar: DEBUG: starting synthesis/pnr
-[2024-06-26 19:24:10,112] niar: DEBUG: synthesis/pnr finished in 0:01:41.664400
-[2024-06-26 19:24:10,138] niar: INFO: 
-[2024-06-26 19:24:10,138] niar: INFO: === sae ===
-[2024-06-26 19:24:10,138] niar: INFO: 
-[2024-06-26 19:24:10,138] niar: INFO:    Number of wires:               2694
-[2024-06-26 19:24:10,138] niar: INFO:    Number of wire bits:           8864
-[2024-06-26 19:24:10,138] niar: INFO:    Number of public wires:        2694
-[2024-06-26 19:24:10,138] niar: INFO:    Number of public wire bits:    8864
-[2024-06-26 19:24:10,138] niar: INFO:    Number of ports:                  4
-[2024-06-26 19:24:10,138] niar: INFO:    Number of port bits:              4
-[2024-06-26 19:24:10,138] niar: INFO:    Number of memories:               0
-[2024-06-26 19:24:10,138] niar: INFO:    Number of memory bits:            0
-[2024-06-26 19:24:10,138] niar: INFO:    Number of processes:              0
-[2024-06-26 19:24:10,138] niar: INFO:    Number of cells:               5454
-[2024-06-26 19:24:10,138] niar: INFO:      $scopeinfo                     20
-[2024-06-26 19:24:10,138] niar: INFO:      SB_CARRY                      429
-[2024-06-26 19:24:10,138] niar: INFO:      SB_DFF                         79
-[2024-06-26 19:24:10,138] niar: INFO:      SB_DFFE                        35
-[2024-06-26 19:24:10,138] niar: INFO:      SB_DFFESR                    1388
-[2024-06-26 19:24:10,138] niar: INFO:      SB_DFFSR                        8
-[2024-06-26 19:24:10,138] niar: INFO:      SB_GB_IO                        1
-[2024-06-26 19:24:10,138] niar: INFO:      SB_IO                           3
-[2024-06-26 19:24:10,138] niar: INFO:      SB_LUT4                      3473
-[2024-06-26 19:24:10,138] niar: INFO:      SB_RAM40_4K                    18
-[2024-06-26 19:24:10,138] niar: INFO: 
-[2024-06-26 19:24:10,138] niar: INFO: Device utilisation:
-[2024-06-26 19:24:10,139] niar: INFO:            ICESTORM_LC:  4736/ 5280    89%
-[2024-06-26 19:24:10,139] niar: INFO:           ICESTORM_RAM:    18/   30    60%
-[2024-06-26 19:24:10,139] niar: INFO:                  SB_IO:     4/   96     4%
-[2024-06-26 19:24:10,139] niar: INFO:                  SB_GB:     5/    8    62%
-[2024-06-26 19:24:10,139] niar: INFO:           ICESTORM_PLL:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:            SB_WARMBOOT:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:           ICESTORM_DSP:     0/    8     0%
-[2024-06-26 19:24:10,139] niar: INFO:         ICESTORM_HFOSC:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:         ICESTORM_LFOSC:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:                 SB_I2C:     0/    2     0%
-[2024-06-26 19:24:10,139] niar: INFO:                 SB_SPI:     0/    2     0%
-[2024-06-26 19:24:10,139] niar: INFO:                 IO_I3C:     0/    2     0%
-[2024-06-26 19:24:10,139] niar: INFO:            SB_LEDDA_IP:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:            SB_RGBA_DRV:     0/    1     0%
-[2024-06-26 19:24:10,139] niar: INFO:         ICESTORM_SPRAM:     0/    4     0%
-[2024-06-26 19:24:10,139] niar: INFO: 
+[2024-06-27 19:45:28,549] niar: INFO: building sae for icebreaker
+[2024-06-27 19:45:28,550] niar: DEBUG: starting elaboration
+[2024-06-27 19:45:28,781] niar: DEBUG: elaboration finished in 0:00:00.230853
+[2024-06-27 19:45:28,781] niar: DEBUG: 'sae.il': 431,269 bytes
+[2024-06-27 19:45:28,781] niar: DEBUG: starting synthesis/pnr
+[2024-06-27 19:45:28,781] niar: INFO: [run]   execute_build
+[2024-06-27 19:47:57,544] niar: DEBUG: synthesis/pnr finished in 0:02:28.763497
+[2024-06-27 19:47:57,571] niar: INFO:
+[2024-06-27 19:47:57,571] niar: INFO: === sae ===
+[2024-06-27 19:47:57,571] niar: INFO:
+[2024-06-27 19:47:57,571] niar: INFO:    Number of wires:               2827
+[2024-06-27 19:47:57,571] niar: INFO:    Number of wire bits:           9237
+[2024-06-27 19:47:57,571] niar: INFO:    Number of public wires:        2827
+[2024-06-27 19:47:57,571] niar: INFO:    Number of public wire bits:    9237
+[2024-06-27 19:47:57,571] niar: INFO:    Number of ports:                  4
+[2024-06-27 19:47:57,571] niar: INFO:    Number of port bits:              4
+[2024-06-27 19:47:57,571] niar: INFO:    Number of memories:               0
+[2024-06-27 19:47:57,571] niar: INFO:    Number of memory bits:            0
+[2024-06-27 19:47:57,571] niar: INFO:    Number of processes:              0
+[2024-06-27 19:47:57,571] niar: INFO:    Number of cells:               5733
+[2024-06-27 19:47:57,571] niar: INFO:      $scopeinfo                     20
+[2024-06-27 19:47:57,571] niar: INFO:      SB_CARRY                      452
+[2024-06-27 19:47:57,571] niar: INFO:      SB_DFF                         79
+[2024-06-27 19:47:57,571] niar: INFO:      SB_DFFE                        35
+[2024-06-27 19:47:57,571] niar: INFO:      SB_DFFESR                    1380
+[2024-06-27 19:47:57,571] niar: INFO:      SB_DFFSR                        8
+[2024-06-27 19:47:57,571] niar: INFO:      SB_GB_IO                        1
+[2024-06-27 19:47:57,571] niar: INFO:      SB_IO                           3
+[2024-06-27 19:47:57,571] niar: INFO:      SB_LUT4                      3737
+[2024-06-27 19:47:57,571] niar: INFO:      SB_RAM40_4K                    18
+[2024-06-27 19:47:57,571] niar: INFO:
+[2024-06-27 19:47:57,571] niar: INFO: Device utilisation:
+[2024-06-27 19:47:57,571] niar: INFO:            ICESTORM_LC:  5035/ 5280    95%
+[2024-06-27 19:47:57,571] niar: INFO:           ICESTORM_RAM:    18/   30    60%
+[2024-06-27 19:47:57,571] niar: INFO:                  SB_IO:     4/   96     4%
+[2024-06-27 19:47:57,571] niar: INFO:                  SB_GB:     5/    8    62%
+[2024-06-27 19:47:57,571] niar: INFO:           ICESTORM_PLL:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:            SB_WARMBOOT:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:           ICESTORM_DSP:     0/    8     0%
+[2024-06-27 19:47:57,571] niar: INFO:         ICESTORM_HFOSC:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:         ICESTORM_LFOSC:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:                 SB_I2C:     0/    2     0%
+[2024-06-27 19:47:57,571] niar: INFO:                 SB_SPI:     0/    2     0%
+[2024-06-27 19:47:57,571] niar: INFO:                 IO_I3C:     0/    2     0%
+[2024-06-27 19:47:57,571] niar: INFO:            SB_LEDDA_IP:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:            SB_RGBA_DRV:     0/    1     0%
+[2024-06-27 19:47:57,571] niar: INFO:         ICESTORM_SPRAM:     0/    4     0%
+[2024-06-27 19:47:57,571] niar: INFO:

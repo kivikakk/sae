@@ -12,8 +12,8 @@ public:
         RECEIVED,
     };
 
-    result tick();
     void tx(const std::string& b);
+    result tick();
 
     uint8_t last_byte() const;
 
