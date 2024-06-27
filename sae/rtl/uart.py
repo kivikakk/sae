@@ -17,7 +17,7 @@ class UART(Component):
     _tx_fifo: SyncFIFOBuffered
     _rx_fifo: SyncFIFOBuffered
 
-    def __init__(self, plat_uart, baud=9600):
+    def __init__(self, plat_uart, baud=115_200):
         self._plat_uart = plat_uart
         self._baud = baud
         super().__init__()

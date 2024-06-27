@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 from amaranth import Module, ResetInserter, Signal
 from amaranth.lib.wiring import Component, In, Out
 
@@ -36,11 +38,18 @@ class Top(Component):
                 self.hart.plat_uart = platform.request("uart")
 
             case cxxrtl():
+                @dataclass
+                class FakeUartPin:
+                    i: Signal = None
+                    o: Signal = None
+
+                @dataclass
                 class FakeUart:
-                    def __init__(self, *, rx, tx):
-                        self.rx = rx
-                        self.tx = tx
-                self.hart.plat_uart = FakeUart(rx=self.uart_rx, tx=self.uart_tx)
+                    rx: FakeUartPin
+                    tx: FakeUartPin
+
+                self.hart.plat_uart = FakeUart(
+                    rx=FakeUartPin(i=self.uart_rx), tx=FakeUartPin(o=self.uart_tx))
 
         m.submodules.hart = ResetInserter(rst)(self.hart)
 
