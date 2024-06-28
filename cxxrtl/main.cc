@@ -2,6 +2,7 @@
 #include <iostream>
 #include <fstream>
 #include <optional>
+#include <chrono>
 
 #include <cxxrtl/cxxrtl_vcd.h>
 #include <sae.h>
@@ -34,6 +35,9 @@ int main(int argc, char **argv) {
 
     int rc = 0;
     bool done = false;
+
+    auto start = std::chrono::high_resolution_clock::now();
+
     enum {
         RECV_QUERY,
         RECV_ANSWER,
@@ -77,7 +81,11 @@ int main(int argc, char **argv) {
 
     if (!done) rc = 1;
 
+    auto finish = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::nanoseconds>(finish - start).count();
+
     std::cout << "finished on cycle " << std::dec << (vcd_time >> 1) << ", rc=" << rc << std::endl;
+    std::cout << "took " << duration << "ns = " << (duration / (vcd_time >> 1)) << "ns/cyc" << std::endl;
 
     if (vcd_out.has_value()) {
         std::ofstream of(*vcd_out);
