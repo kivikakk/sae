@@ -22,3 +22,9 @@ build-backend = "pdm.backend"
 [tool.pytest.ini_options]
 addopts = ["-n", "auto"]
 testpaths = ["tests"]
+
+[tool.pdm.dev-dependencies]
+test = [
+    "pytest>=8.2.2",
+    "pytest-xdist>=3.6.1",
+]
