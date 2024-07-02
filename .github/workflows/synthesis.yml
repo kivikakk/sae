@@ -29,4 +29,4 @@ jobs:
         github-token: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Elaborate and synthesise
-      run: python -m sae build -b ${{ matrix.board }}
+      run: .venv/bin/python -m sae build -b ${{ matrix.board }}

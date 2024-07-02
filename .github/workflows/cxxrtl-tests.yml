@@ -19,4 +19,4 @@ jobs:
     - uses: kivikakk/niar/setup-action@main
 
     - name: Compile CXXRTL and run
-      run: python -m sae cxxrtl -Onone
+      run: .venv/bin/python -m sae cxxrtl -Onone
