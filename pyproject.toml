@@ -6,18 +6,19 @@ authors = [
     {name = "Asherah Connor", email = "ashe@kivikakk.ee"},
 ]
 dependencies = [
-    "amaranth >= 0.4.5, < 0.6",
-    "niar >= 0.1",
+    "amaranth[builtin-yosys] @ git+https://github.com/amaranth-lang/amaranth@main",
+    "amaranth-boards @ git+https://github.com/kivikakk/amaranth-boards@main",
+    "amaranth-stdio @ git+https://github.com/kivikakk/amaranth-stdio@main",
+    "niar @ git+https://github.com/kivikakk/niar@main",
     "funcparserlib >= 1.0.1",
 ]
 requires-python = ">=3.8"
 license = {text = "BSD-2-Clause"}
 
-[project.optional-dependencies]
-build = [
-    "amaranth-boards",
-]
-
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+[tool.pytest.ini_options]
+addopts = ["-n", "auto"]
+testpaths = ["tests"]

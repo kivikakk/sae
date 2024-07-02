@@ -1,5 +1,5 @@
-__pypackages__
 __pycache__
+.pdm-python
 /build
 *.vcd
 *.gtkw
