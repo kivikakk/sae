@@ -172,10 +172,6 @@ class Hart(Elaboratable):
                 v_b = InsB(insn)
                 v_s = InsS(insn)
 
-                # sx I imm to XLEN
-                v_sxi = Signal(signed(32))
-                m.d.comb += v_sxi.eq(v_i.imm.as_signed())
-
                 # set pc/next before processing opcode so they can be
                 # overridden, set x0 after so it remains zero (lol).
                 m.next = "fetch.init"
@@ -210,27 +206,8 @@ class Hart(Elaboratable):
                             with m.Default():
                                 self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                     with m.Case(Opcode.OP_IMM):
-                        with m.Switch(v_i.funct3):
-                            with m.Case(OpImmFunct.ADDI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] + v_sxi)
-                            with m.Case(OpImmFunct.SLTI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1].as_signed() < v_sxi)
-                            with m.Case(OpImmFunct.SLTIU):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] < v_sxi.as_unsigned())
-                            with m.Case(OpImmFunct.ANDI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] & v_sxi)
-                            with m.Case(OpImmFunct.ORI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] | v_sxi)
-                            with m.Case(OpImmFunct.XORI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] ^ v_sxi)
-                            with m.Case(OpImmFunct.SLLI):
-                                m.d.sync += self.write_xreg(v_i.rd, self.xreg[v_i.rs1] << v_i.imm[:5])
-                            with m.Case(OpImmFunct.SRI):
-                                rs1 = self.xreg[v_i.rs1]
-                                rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
-                                m.d.sync += self.write_xreg(v_i.rd, rs1 >> v_i.imm[:5])
-                            with m.Default():
-                                self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+                        m.d.sync += self.wb_val.eq(self.xreg[v_i.rs1])
+                        m.next = "op.imm"
                     with m.Case(Opcode.OP):
                         with m.Switch(v_r.funct3):
                             with m.Case(OpRegFunct.ADDSUB):
@@ -341,6 +318,37 @@ class Hart(Elaboratable):
                                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                             with m.Default():
                                 self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+                    with m.Default():
+                        self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+
+            with m.State("op.imm"):
+                # sx I imm to XLEN
+                v_sxi = Signal(signed(self.XLEN))
+                m.d.comb += v_sxi.eq(v_i.imm.as_signed())
+
+                out = Signal(signed(self.XLEN))
+                m.d.sync += self.write_xreg(v_i.rd, out)
+
+                m.next = "fetch.init"
+                with m.Switch(v_i.funct3):
+                    with m.Case(OpImmFunct.ADDI):
+                        m.d.comb += out.eq(self.wb_val + v_sxi)
+                    with m.Case(OpImmFunct.SLTI):
+                        m.d.comb += out.eq(self.wb_val.as_signed() < v_sxi)
+                    with m.Case(OpImmFunct.SLTIU):
+                        m.d.comb += out.eq(self.wb_val < v_sxi.as_unsigned())
+                    with m.Case(OpImmFunct.ANDI):
+                        m.d.comb += out.eq(self.wb_val & v_sxi)
+                    with m.Case(OpImmFunct.ORI):
+                        m.d.comb += out.eq(self.wb_val | v_sxi)
+                    with m.Case(OpImmFunct.XORI):
+                        m.d.comb += out.eq(self.wb_val ^ v_sxi)
+                    with m.Case(OpImmFunct.SLLI):
+                        m.d.comb += out.eq(self.wb_val << v_i.imm[:5])
+                    with m.Case(OpImmFunct.SRI):
+                        rs1 = self.wb_val
+                        rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
+                        m.d.comb += out.eq(rs1 >> v_i.imm[:5])
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
