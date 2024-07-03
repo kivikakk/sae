@@ -157,7 +157,7 @@ class Hart(Elaboratable):
                     insn = mmu.read.value
                     m.d.sync += self.insn.eq(insn)
 
-                    with m.If((insn[:16] == 0) | insn.all()):
+                    with m.If(~insn[:16].bool() | insn.all()):
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                     with m.Else():
                         m.next = "fetch.resolve"
