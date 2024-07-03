@@ -60,13 +60,23 @@ class MMU(Component):
         m = Module()
 
         m.submodules.sysmem = sysmem = self.sysmem
+        rp = sysmem.read_port()
+        wp = sysmem.write_port(granularity=8)
+
         self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem, uart=self.uart)
         connect(m, self.read, mmu_read.read)
-        connect(m, sysmem.read_port(), mmu_read.port)
+        connect(m, rp, mmu_read.port)
 
         self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem, uart=self.uart)
         connect(m, self.write, mmu_write.write)
-        connect(m, sysmem.write_port(granularity=8), mmu_write.port)
+        connect(m, wp, mmu_write.port)
+
+        # TODO: if we want to support SPRAM on main memory. Note that we can't
+        # init it, so there needs to be some other way of doing that. (Note also
+        # that Amaranth doesn't support this yet, since we always generate a
+        # $meminit_v2.)
+        #
+        # m.d.comb += rp.en.eq(~wp.en.any())
 
         return m
 

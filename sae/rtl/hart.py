@@ -92,13 +92,14 @@ class Hart(Elaboratable):
         self.pc = Signal(self.XLEN)
         self.insn = Signal(self.ILEN)
 
-        self.wb_reg = Signal(range(self.XCOUNT))
-        self.wb_val = Signal(self.XLEN)
+        self.xwr_en = Signal()
+        self.xwr_reg = Signal(range(self.XCOUNT))
+        self.xwr_val = Signal(self.XLEN)
 
-        self.rb_reg1 = Signal(range(self.XCOUNT))
-        self.rb_val1 = Signal(self.XLEN)
-        self.rb_reg2 = Signal(range(self.XCOUNT))
-        self.rb_val2 = Signal(self.XLEN)
+        self.xrd1_reg = Signal(range(self.XCOUNT))
+        self.xrd1_val = Signal(self.XLEN)
+        self.xrd2_reg = Signal(range(self.XCOUNT))
+        self.xrd2_val = Signal(self.XLEN)
 
     @classmethod
     def sysmem_for(cls, path, *, memory):
@@ -143,29 +144,32 @@ class Hart(Elaboratable):
         m.d.comb += self.state.eq(State.RUNNING)
 
         xmem = m.submodules.xmem = self.xmem
+        # This ends up duplicating the RAM cells for both read ports.
+        # TODO: read sequentially with one port.
         xmem_write = xmem.write_port()
         xmem_read1 = xmem.read_port()
         xmem_read2 = xmem.read_port()
 
-        m.d.sync += xmem_write.en.eq(0)
-        m.d.comb += xmem_read1.addr.eq(self.rb_reg1)
-        m.d.comb += self.rb_val1.eq(xmem_read1.data)
-        m.d.comb += xmem_read2.addr.eq(self.rb_reg2)
-        m.d.comb += self.rb_val2.eq(xmem_read2.data)
+        m.d.sync += self.xwr_en.eq(0)
+        m.d.comb += [
+            xmem_write.addr.eq(self.xwr_reg),
+            xmem_write.data.eq(self.xwr_val),
+            xmem_write.en.eq(self.xwr_en & self.xwr_reg.any()),
+
+            xmem_read1.addr.eq(self.xrd1_reg),
+            self.xrd1_val.eq(xmem_read1.data),
+            xmem_read2.addr.eq(self.xrd2_reg),
+            self.xrd2_val.eq(xmem_read2.data),
+        ]
+
+        if self.track_reg_written:
+            with m.If(xmem_write.en):
+                m.d.sync += self.xreg_written[xmem_write.addr].eq(1)
 
         with m.FSM() as fsm:
             m.d.comb += self.resolving.eq(fsm.ongoing("fetch.resolve"))
 
             with m.State("fetch.init"):
-                with m.If(self.wb_reg != 0):
-                    m.d.sync += [
-                        xmem_write.addr.eq(self.wb_reg),
-                        xmem_write.data.eq(self.wb_val),
-                        xmem_write.en.eq(1),
-                        self.wb_reg.eq(0),
-                    ]
-                    if self.track_reg_written:
-                        m.d.sync += self.xreg_written[self.wb_reg].eq(1)
                 m.d.sync += [
                     mmu.read.addr.eq(self.pc),
                     mmu.read.width.eq(AccessWidth.WORD),
@@ -208,7 +212,7 @@ class Hart(Elaboratable):
                             self.read_xreg1(v_i.rs1),
                             imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
-                            self.wb_reg.eq(v_i.rd),
+                            self.xwr_reg.eq(v_i.rd),
                         ]
                         m.next = "op.load.wait"
                     with m.Case(Opcode.MISC_MEM):
@@ -222,7 +226,7 @@ class Hart(Elaboratable):
                             self.read_xreg1(v_i.rs1),
                             imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
-                            self.wb_reg.eq(v_i.rd),
+                            self.xwr_reg.eq(v_i.rd),
                         ]
                         m.next = "op.op_imm.wait"
                     with m.Case(Opcode.OP):
@@ -231,7 +235,7 @@ class Hart(Elaboratable):
                             self.read_xreg2(v_r.rs2),
                             funct3.eq(v_r.funct3),
                             funct7.eq(v_r.funct7),
-                            self.wb_reg.eq(v_r.rd),
+                            self.xwr_reg.eq(v_r.rd),
                         ]
                         m.next = "op.op.wait"
                     with m.Case(Opcode.LUI):
@@ -261,7 +265,7 @@ class Hart(Elaboratable):
                         m.d.sync += [
                             self.read_xreg1(v_i.rs1),
                             imm.eq(v_i.imm.as_signed()),
-                            self.wb_reg.eq(v_i.rd),
+                            self.xwr_reg.eq(v_i.rd),
                         ]
                         m.next = "op.jalr.wait"
                     with m.Case(Opcode.JAL):
@@ -288,7 +292,7 @@ class Hart(Elaboratable):
             with m.State("op.load.wait"):
                 m.next = "op.load"
             with m.State("op.load"):
-                addr = self.rb_val1 + imm
+                addr = self.xrd1_val + imm
                 m.d.sync += [
                     mmu.read.addr.eq(addr),
                     mmu.read.width.eq(funct3[:2]),
@@ -312,27 +316,30 @@ class Hart(Elaboratable):
                 m.next = "op.op_imm"
             with m.State("op.op_imm"):
                 out = Signal(self.XLEN)
-                m.d.sync += self.wb_val.eq(out)
+                m.d.sync += [
+                    self.xwr_val.eq(out),
+                    self.xwr_en.eq(1),
+                ]
 
                 m.next = "fetch.init"
                 # "ALU".
                 with m.Switch(funct3):
                     with m.Case(OpImmFunct.ADDI):
-                        m.d.comb += out.eq(self.rb_val1 + imm)
+                        m.d.comb += out.eq(self.xrd1_val + imm)
                     with m.Case(OpImmFunct.SLTI):
-                        m.d.comb += out.eq(self.rb_val1.as_signed() < imm.as_signed())
+                        m.d.comb += out.eq(self.xrd1_val.as_signed() < imm.as_signed())
                     with m.Case(OpImmFunct.SLTIU):
-                        m.d.comb += out.eq(self.rb_val1 < imm)
+                        m.d.comb += out.eq(self.xrd1_val < imm)
                     with m.Case(OpImmFunct.ANDI):
-                        m.d.comb += out.eq(self.rb_val1 & imm)
+                        m.d.comb += out.eq(self.xrd1_val & imm)
                     with m.Case(OpImmFunct.ORI):
-                        m.d.comb += out.eq(self.rb_val1 | imm)
+                        m.d.comb += out.eq(self.xrd1_val | imm)
                     with m.Case(OpImmFunct.XORI):
-                        m.d.comb += out.eq(self.rb_val1 ^ imm)
+                        m.d.comb += out.eq(self.xrd1_val ^ imm)
                     with m.Case(OpImmFunct.SLLI):
-                        m.d.comb += out.eq(self.rb_val1 << imm[:5])
+                        m.d.comb += out.eq(self.xrd1_val << imm[:5])
                     with m.Case(OpImmFunct.SRI):
-                        rs1 = self.rb_val1
+                        rs1 = self.xrd1_val
                         rs1 = Mux(imm[10], rs1.as_signed(), rs1)
                         m.d.comb += out.eq(rs1 >> imm[:5])
                     with m.Default():
@@ -342,21 +349,21 @@ class Hart(Elaboratable):
                 m.next = "op.op"
             with m.State("op.op"):
                 # We can probably dispatch this better to begin with.
-                m.d.sync += imm.eq(self.rb_val2)
+                m.d.sync += imm.eq(self.xrd2_val)
                 with m.If(funct7[5]):
                     with m.If(funct3 == OpRegFunct.ADDSUB):
-                        m.d.sync += imm.eq(-self.rb_val2)
+                        m.d.sync += imm.eq(-self.xrd2_val)
                     with m.If(funct3 == OpRegFunct.SR):
-                        m.d.sync += imm.eq(Cat(self.rb_val2[:5], C(0, 5), C(1, 1)))
+                        m.d.sync += imm.eq(Cat(self.xrd2_val[:5], C(0, 5), C(1, 1)))
                 m.next = "op.op_imm"
 
             with m.State("op.store.wait"):
                 m.next = "op.store"
             with m.State("op.store"):
-                addr = self.rb_val1 + imm
+                addr = self.xrd1_val + imm
                 m.d.sync += [
                     mmu.write.addr.eq(addr),
-                    mmu.write.data.eq(self.rb_val2),
+                    mmu.write.data.eq(self.xrd2_val),
                     mmu.write.ack.eq(1),
                 ]
                 m.next = "s.delay"
@@ -383,17 +390,17 @@ class Hart(Elaboratable):
 
                 with m.Switch(funct3):
                     with m.Case(OpBranchFunct.BEQ):
-                        m.d.comb += taken.eq(self.rb_val1 == self.rb_val2)
+                        m.d.comb += taken.eq(self.xrd1_val == self.xrd2_val)
                     with m.Case(OpBranchFunct.BNE):
-                        m.d.comb += taken.eq(self.rb_val1 != self.rb_val2)
+                        m.d.comb += taken.eq(self.xrd1_val != self.xrd2_val)
                     with m.Case(OpBranchFunct.BLT):
-                        m.d.comb += taken.eq(self.rb_val1.as_signed() < self.rb_val2.as_signed())
+                        m.d.comb += taken.eq(self.xrd1_val.as_signed() < self.xrd2_val.as_signed())
                     with m.Case(OpBranchFunct.BGE):
-                        m.d.comb += taken.eq(self.rb_val1.as_signed() >= self.rb_val2.as_signed())
+                        m.d.comb += taken.eq(self.xrd1_val.as_signed() >= self.xrd2_val.as_signed())
                     with m.Case(OpBranchFunct.BLTU):
-                        m.d.comb += taken.eq(self.rb_val1 < self.rb_val2)
+                        m.d.comb += taken.eq(self.xrd1_val < self.xrd2_val)
                     with m.Case(OpBranchFunct.BGEU):
-                        m.d.comb += taken.eq(self.rb_val1 >= self.rb_val2)
+                        m.d.comb += taken.eq(self.xrd1_val >= self.xrd2_val)
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
@@ -401,34 +408,50 @@ class Hart(Elaboratable):
                 m.next = "op.jalr"
             with m.State("op.jalr"):
                 m.next = "fetch.init"
-                with self.jump(m, (self.rb_val1 + imm) & 0xFFFFFFFE):
-                    m.d.sync += self.wb_val.eq(self.pc)
-                with m.Else():
-                    m.d.sync += self.wb_reg.eq(0)
+                with self.jump(m, (self.xrd1_val + imm) & 0xFFFFFFFE):
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(self.pc),
+                    ]
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.wb_val.eq(mmu.read.value)
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(mmu.read.value),
+                    ]
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.wb_val.eq(mmu.read.value[:16].as_signed())
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(mmu.read.value[:16].as_signed()),
+                    ]
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.wb_val.eq(mmu.read.value[:16])
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(mmu.read.value[:16]),
+                    ]
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.wb_val.eq(mmu.read.value[:8].as_signed())
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(mmu.read.value[:8].as_signed()),
+                    ]
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
                 with m.If(mmu.read.valid):
-                    m.d.sync += self.wb_val.eq(mmu.read.value[:8])
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(mmu.read.value[:8]),
+                    ]
                     m.next = "fetch.init"
 
             with m.State("s.delay"):
@@ -445,15 +468,16 @@ class Hart(Elaboratable):
 
     def write_xreg(self, xn, value):
         return [
-            self.wb_reg.eq(xn),
-            self.wb_val.eq(value),
+            self.xwr_en.eq(1),
+            self.xwr_reg.eq(xn),
+            self.xwr_val.eq(value),
         ]
 
     def read_xreg1(self, xn):
-        return self.rb_reg1.eq(xn)
+        return self.xrd1_reg.eq(xn)
 
     def read_xreg2(self, xn):
-        return self.rb_reg2.eq(xn)
+        return self.xrd2_reg.eq(xn)
 
     def jump(self, m, pc):
         with m.If(pc[:2].any()):
