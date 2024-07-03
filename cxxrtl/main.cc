@@ -44,7 +44,7 @@ int main(int argc, char **argv) {
     } state = RECV_QUERY;
     std::string recvd;
 
-    for (int i = 0; i < 1000000 && !done; ++i) {
+    for (int i = 0; i < 100000 && !done; ++i) {
         top.p_clk.set(true);
         top.step();
         vcd.sample(vcd_time++);

@@ -193,7 +193,7 @@ class Hart(Elaboratable):
                     with m.Case(Opcode.LOAD):
                         m.d.sync += [
                             self.read_xreg1(v_i.rs1),
-                            imm.eq(v_i.imm),
+                            imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
                             self.wb_reg.eq(v_i.rd),
                         ]
@@ -207,7 +207,7 @@ class Hart(Elaboratable):
                     with m.Case(Opcode.OP_IMM):
                         m.d.sync += [
                             self.read_xreg1(v_i.rs1),
-                            imm.eq(v_i.imm),
+                            imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
                             self.wb_reg.eq(v_i.rd),
                         ]
@@ -275,7 +275,7 @@ class Hart(Elaboratable):
             with m.State("op.load.wait"):
                 m.next = "op.load"
             with m.State("op.load"):
-                addr = self.rb_val1 + imm[:12].as_signed()
+                addr = self.rb_val1 + imm
                 m.d.sync += [
                     mmu.read.addr.eq(addr),
                     mmu.read.width.eq(funct3[:2]),
@@ -298,27 +298,24 @@ class Hart(Elaboratable):
             with m.State("op.op_imm.wait"):
                 m.next = "op.op_imm"
             with m.State("op.op_imm"):
-                # sx I imm to XLEN
-                v_sxi = Signal(signed(self.XLEN))
-                m.d.comb += v_sxi.eq(imm[:12].as_signed())
-
                 out = Signal(self.XLEN)
                 m.d.sync += self.wb_val.eq(out)
 
                 m.next = "fetch.init"
+                # "ALU".
                 with m.Switch(funct3):
                     with m.Case(OpImmFunct.ADDI):
-                        m.d.comb += out.eq(self.rb_val1 + v_sxi)
+                        m.d.comb += out.eq(self.rb_val1 + imm)
                     with m.Case(OpImmFunct.SLTI):
-                        m.d.comb += out.eq(self.rb_val1.as_signed() < v_sxi)
+                        m.d.comb += out.eq(self.rb_val1.as_signed() < imm.as_signed())
                     with m.Case(OpImmFunct.SLTIU):
-                        m.d.comb += out.eq(self.rb_val1 < v_sxi.as_unsigned())
+                        m.d.comb += out.eq(self.rb_val1 < imm)
                     with m.Case(OpImmFunct.ANDI):
-                        m.d.comb += out.eq(self.rb_val1 & v_sxi)
+                        m.d.comb += out.eq(self.rb_val1 & imm)
                     with m.Case(OpImmFunct.ORI):
-                        m.d.comb += out.eq(self.rb_val1 | v_sxi)
+                        m.d.comb += out.eq(self.rb_val1 | imm)
                     with m.Case(OpImmFunct.XORI):
-                        m.d.comb += out.eq(self.rb_val1 ^ v_sxi)
+                        m.d.comb += out.eq(self.rb_val1 ^ imm)
                     with m.Case(OpImmFunct.SLLI):
                         m.d.comb += out.eq(self.rb_val1 << imm[:5])
                     with m.Case(OpImmFunct.SRI):
@@ -331,40 +328,19 @@ class Hart(Elaboratable):
             with m.State("op.op.wait"):
                 m.next = "op.op"
             with m.State("op.op"):
-                m.d.sync += self.wb_val.eq(out)
-
-                m.next = "fetch.init"
-                with m.Switch(funct3):
-                    with m.Case(OpRegFunct.ADDSUB):
-                        m.d.comb += out.eq(Mux(
-                            funct7[5],
-                            self.rb_val1 - self.rb_val2,
-                            self.rb_val1 + self.rb_val2,
-                        ))
-                    with m.Case(OpRegFunct.SLT):
-                        m.d.comb += out.eq(self.rb_val1.as_signed() < self.rb_val2.as_signed())
-                    with m.Case(OpRegFunct.SLTU):
-                        m.d.comb += out.eq(self.rb_val1 < self.rb_val2)
-                    with m.Case(OpRegFunct.AND):
-                        m.d.comb += out.eq(self.rb_val1 & self.rb_val2)
-                    with m.Case(OpRegFunct.OR):
-                        m.d.comb += out.eq(self.rb_val1 | self.rb_val2)
-                    with m.Case(OpRegFunct.XOR):
-                        m.d.comb += out.eq(self.rb_val1 ^ self.rb_val2)
-                    with m.Case(OpRegFunct.SLL):
-                        m.d.comb += out.eq(self.rb_val1 << self.rb_val2[:5])
-                    with m.Case(OpRegFunct.SR):
-                        rs1 = self.rb_val1
-                        rs1 = Mux(funct7[5], rs1.as_signed(), rs1)
-                        m.d.comb += out.eq(rs1 >> self.rb_val2[:5])
-                    with m.Default():
-                        self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+                # We can probably dispatch this better to begin with.
+                m.d.sync += imm.eq(self.rb_val2)
+                with m.If(funct7[5]):
+                    with m.If(funct3 == OpRegFunct.ADDSUB):
+                        m.d.sync += imm.eq(-self.rb_val2)
+                    with m.If(funct3 == OpRegFunct.SR):
+                        m.d.sync += imm.eq(Cat(self.rb_val2[:5], C(0, 5), C(1, 1)))
+                m.next = "op.op_imm"
 
             with m.State("op.store.wait"):
                 m.next = "op.store"
             with m.State("op.store"):
-                imm = Cat(v_s.imm4_0, v_s.imm11_5)
-                addr = self.rb_val1 + imm.as_signed()
+                addr = self.rb_val1 + imm
                 m.d.sync += [
                     mmu.write.addr.eq(addr),
                     mmu.write.data.eq(self.rb_val2),
@@ -372,7 +348,7 @@ class Hart(Elaboratable):
                 ]
                 m.next = "s.delay"
 
-                with m.Switch(v_s.funct3):
+                with m.Switch(funct3):
                     with m.Case(OpStoreFunct.SW):
                         m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
                     with m.Case(OpStoreFunct.SH):
@@ -385,41 +361,37 @@ class Hart(Elaboratable):
             with m.State("op.branch.wait"):
                 m.next = "op.branch"
             with m.State("op.branch"):
-                imm = Cat(  # meow :3
-                    C(0, 1), v_b.imm4_1, v_b.imm10_5, v_b.imm11, v_b.imm12
-                ).as_signed()
-                m.d.sync += self.pc.eq(self.pc + 4)
+                taken = Signal()
+                with m.If(taken):
+                    self.jump(m, self.pc + imm)
+                with m.Else():
+                    m.d.sync += self.pc.eq(self.pc + 4)
                 m.next = "fetch.init"
-                with m.Switch(v_b.funct3):
+
+                with m.Switch(funct3):
                     with m.Case(OpBranchFunct.BEQ):
-                        with m.If(self.rb_val1 == self.rb_val2):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1 == self.rb_val2)
                     with m.Case(OpBranchFunct.BNE):
-                        with m.If(self.rb_val1 != self.rb_val2):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1 != self.rb_val2)
                     with m.Case(OpBranchFunct.BLT):
-                        with m.If(self.rb_val1.as_signed() < self.rb_val2.as_signed()):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1.as_signed() < self.rb_val2.as_signed())
                     with m.Case(OpBranchFunct.BGE):
-                        with m.If(self.rb_val1.as_signed() >= self.rb_val2.as_signed()):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1.as_signed() >= self.rb_val2.as_signed())
                     with m.Case(OpBranchFunct.BLTU):
-                        with m.If(self.rb_val1 < self.rb_val2):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1 < self.rb_val2)
                     with m.Case(OpBranchFunct.BGEU):
-                        with m.If(self.rb_val1 >= self.rb_val2):
-                            self.jump(m, self.pc + imm)
+                        m.d.comb += taken.eq(self.rb_val1 >= self.rb_val2)
                     with m.Default():
-                        self.fault(
-                            m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn
-                        )
+                        self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
             with m.State("op.jalr.wait"):
                 m.next = "op.jalr"
             with m.State("op.jalr"):
                 m.next = "fetch.init"
-                with self.jump(m, (self.rb_val1 + v_i.imm.as_signed()) & 0xFFFFFFFE):
-                    m.d.sync += self.write_xreg(v_i.rd, self.pc)
+                with self.jump(m, (self.rb_val1 + imm) & 0xFFFFFFFE):
+                    m.d.sync += self.wb_val.eq(self.pc)
+                with m.Else():
+                    m.d.sync += self.wb_reg.eq(0)
 
             with m.State("lw.delay"):
                 with m.If(mmu.read.valid):
