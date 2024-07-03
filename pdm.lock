@@ -243,7 +243,7 @@ version = "0.1.1"
 requires_python = ">=3.8"
 git = "https://github.com/kivikakk/niar"
 ref = "main"
-revision = "7572c3716a7ded9619dda4dbf16f4eb7a72e5d76"
+revision = "6ff5e58dbf220d4ace18d212bf5baca643fda499"
 summary = "A small framework for building projects with Amaranth"
 groups = ["default"]
 dependencies = [
