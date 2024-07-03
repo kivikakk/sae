@@ -139,7 +139,7 @@ class Hart(Elaboratable):
         uart = self.uart = m.submodules.uart = UART(self.plat_uart)
 
         self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem, uart=uart)
-        m.d.sync += mmu.read.ack.eq(0)
+        m.d.sync += mmu.read.req_valid.eq(0)
 
         m.d.comb += self.state.eq(State.RUNNING)
 
@@ -169,17 +169,18 @@ class Hart(Elaboratable):
         with m.FSM() as fsm:
             m.d.comb += self.resolving.eq(fsm.ongoing("fetch.resolve"))
 
+            # TODO: start next fetch as soon as a given instruction allows it.
             with m.State("fetch.init"):
                 m.d.sync += [
-                    mmu.read.addr.eq(self.pc),
-                    mmu.read.width.eq(AccessWidth.WORD),
-                    mmu.read.ack.eq(1),
+                    mmu.read.req_addr.eq(self.pc),
+                    mmu.read.req_width.eq(AccessWidth.WORD),
+                    mmu.read.req_valid.eq(1),
                 ]
                 m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
-                with m.If(mmu.read.valid):
-                    insn = mmu.read.value
+                with m.If(mmu.read.resp_valid):
+                    insn = mmu.read.resp_payload
                     m.d.sync += self.insn.eq(insn)
 
                     with m.If(~insn[:16].any() | insn.all()):
@@ -294,9 +295,9 @@ class Hart(Elaboratable):
             with m.State("op.load"):
                 addr = self.xrd1_val + imm
                 m.d.sync += [
-                    mmu.read.addr.eq(addr),
-                    mmu.read.width.eq(funct3[:2]),
-                    mmu.read.ack.eq(1),
+                    mmu.read.req_addr.eq(addr),
+                    mmu.read.req_width.eq(funct3[:2]),
+                    mmu.read.req_valid.eq(1),
                 ]
                 with m.Switch(funct3):
                     with m.Case(OpLoadFunct.LW):
@@ -362,19 +363,19 @@ class Hart(Elaboratable):
             with m.State("op.store"):
                 addr = self.xrd1_val + imm
                 m.d.sync += [
-                    mmu.write.addr.eq(addr),
-                    mmu.write.data.eq(self.xrd2_val),
-                    mmu.write.ack.eq(1),
+                    mmu.write.req_addr.eq(addr),
+                    mmu.write.req_payload.eq(self.xrd2_val),
+                    mmu.write.req_valid.eq(1),
                 ]
                 m.next = "s.delay"
 
                 with m.Switch(funct3):
                     with m.Case(OpStoreFunct.SW):
-                        m.d.sync += mmu.write.width.eq(AccessWidth.WORD)
+                        m.d.sync += mmu.write.req_width.eq(AccessWidth.WORD)
                     with m.Case(OpStoreFunct.SH):
-                        m.d.sync += mmu.write.width.eq(AccessWidth.HALF)
+                        m.d.sync += mmu.write.req_width.eq(AccessWidth.HALF)
                     with m.Case(OpStoreFunct.SB):
-                        m.d.sync += mmu.write.width.eq(AccessWidth.BYTE)
+                        m.d.sync += mmu.write.req_width.eq(AccessWidth.BYTE)
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
@@ -415,48 +416,48 @@ class Hart(Elaboratable):
                     ]
 
             with m.State("lw.delay"):
-                with m.If(mmu.read.valid):
+                with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.value),
+                        self.xwr_val.eq(mmu.read.resp_payload),
                     ]
                     m.next = "fetch.init"
 
             with m.State("lh.delay"):
-                with m.If(mmu.read.valid):
+                with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.value[:16].as_signed()),
+                        self.xwr_val.eq(mmu.read.resp_payload[:16].as_signed()),
                     ]
                     m.next = "fetch.init"
 
             with m.State("lhu.delay"):
-                with m.If(mmu.read.valid):
+                with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.value[:16]),
+                        self.xwr_val.eq(mmu.read.resp_payload[:16]),
                     ]
                     m.next = "fetch.init"
 
             with m.State("lb.delay"):
-                with m.If(mmu.read.valid):
+                with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.value[:8].as_signed()),
+                        self.xwr_val.eq(mmu.read.resp_payload[:8].as_signed()),
                     ]
                     m.next = "fetch.init"
 
             with m.State("lbu.delay"):
-                with m.If(mmu.read.valid):
+                with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.value[:8]),
+                        self.xwr_val.eq(mmu.read.resp_payload[:8]),
                     ]
                     m.next = "fetch.init"
 
             with m.State("s.delay"):
-                m.d.sync += mmu.write.ack.eq(0)
-                with m.If(mmu.write.rdy):
+                m.d.sync += mmu.write.req_valid.eq(0)
+                with m.If(mmu.write.req_ready):
                     # The one-cycle propagation delay here means we can count on
                     # the write being finished by the next read.
                     m.next = "fetch.init"

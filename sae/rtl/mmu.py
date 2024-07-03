@@ -20,23 +20,23 @@ class AccessWidth(IntEnum, shape=2):
 class MMUReadBusSignature(Signature):
     def __init__(self, addr_width, data_width):
         super().__init__({
-            "addr": In(addr_width),
-            "width": In(AccessWidth),
-            "ack": In(1),
-            "rdy": Out(1),
-            "value": Out(data_width),
-            "valid": Out(1),
+            "req_addr": In(addr_width),
+            "req_width": In(AccessWidth),
+            "req_valid": In(1),
+            "req_ready": Out(1),
+            "resp_payload": Out(data_width),
+            "resp_valid": Out(1),
         })
 
 
 class MMUWriteBusSignature(Signature):
     def __init__(self, addr_width, data_width):
         super().__init__({
-            "addr": In(addr_width),
-            "width": In(AccessWidth),
-            "data": In(data_width),
-            "ack": In(1),
-            "rdy": Out(1),
+            "req_addr": In(addr_width),
+            "req_width": In(AccessWidth),
+            "req_payload": In(data_width),
+            "req_valid": In(1),
+            "req_ready": Out(1),
         })
 
 
@@ -113,35 +113,35 @@ class MMURead(Component):
         #   * byte accesses take 1 read.
 
         valid = Signal()
-        m.d.comb += self.read.rdy.eq(0)
-        m.d.comb += self.read.valid.eq(valid & ~self.read.ack)
+        m.d.comb += self.read.req_ready.eq(0)
+        m.d.comb += self.read.resp_valid.eq(valid & ~self.read.req_valid)
 
         with m.FSM():
             with m.State("init"):
-                m.d.comb += self.read.rdy.eq(1)
+                m.d.comb += self.read.req_ready.eq(1)
 
-                with m.If(self.read.ack):
+                with m.If(self.read.req_valid):
                     m.d.sync += [
                         valid.eq(0),
-                        self.port.addr.eq(self.read.addr >> 1),
+                        self.port.addr.eq(self.read.req_addr >> 1),
                     ]
                     m.next = "pipe"
 
                     if self.uart:
                         with m.If(
-                            (self.read.width == AccessWidth.BYTE)
-                            & (self.read.addr == MMU.UART_OFFSET)
+                            (self.read.req_width == AccessWidth.BYTE)
+                            & (self.read.req_addr == MMU.UART_OFFSET)
                         ):
                             with m.If(self.uart.rd.valid):
                                 m.d.sync += [
                                     self.uart.rd.ready.eq(1),
-                                    self.read.value.eq(self.uart.rd.payload),
+                                    self.read.resp_payload.eq(self.uart.rd.payload),
                                     valid.eq(1),
                                 ]
                                 m.next = "uart.dessert"
                             with m.Else():
                                 m.d.sync += [
-                                    self.read.value.eq(0),
+                                    self.read.resp_payload.eq(0),
                                     valid.eq(1),  # ideally we actually identify there's nothing to read!
                                 ]
                                 m.next = "uart.dessert"  # XXX probably unnecessary
@@ -156,8 +156,8 @@ class MMURead(Component):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
 
                 with m.If(
-                    (self.read.width == AccessWidth.WORD)
-                    | ((self.read.width == AccessWidth.HALF) & self.read.addr[0])
+                    (self.read.req_width == AccessWidth.WORD)
+                    | ((self.read.req_width == AccessWidth.HALF) & self.read.req_addr[0])
                 ):
                     m.next = "coll0"
                 with m.Else():
@@ -166,11 +166,11 @@ class MMURead(Component):
             with m.State("coll"):
                 # aligned half, or byte
                 m.d.sync += [
-                    self.read.value.eq(
+                    self.read.resp_payload.eq(
                         Mux(
-                            self.read.width == AccessWidth.HALF,
+                            self.read.req_width == AccessWidth.HALF,
                             self.port.data,
-                            self.port.data.word_select(self.read.addr[0], 8),
+                            self.port.data.word_select(self.read.req_addr[0], 8),
                         )
                     ),
                     valid.eq(1),
@@ -181,33 +181,33 @@ class MMURead(Component):
                 # word, or unaligned half
                 m.d.sync += [
                     self.port.addr.eq(self.port.addr + 1),
-                    self.read.value.eq(self.port.data),
+                    self.read.resp_payload.eq(self.port.data),
                 ]
                 m.next = "coll1"
 
             with m.State("coll1"):
-                with m.If(self.read.width == AccessWidth.HALF):
+                with m.If(self.read.req_width == AccessWidth.HALF):
                     # unaligned half
                     m.d.sync += [
-                        self.read.value.eq(self.read.value[8:] | (self.port.data[:8] << 8)),
+                        self.read.resp_payload.eq(self.read.resp_payload[8:] | (self.port.data[:8] << 8)),
                         valid.eq(1),
                     ]
                     m.next = "init"
-                with m.Elif(~self.read.addr[0]):
+                with m.Elif(~self.read.req_addr[0]):
                     # aligned word
                     m.d.sync += [
-                        self.read.value.eq(self.read.value | (self.port.data << 16)),
+                        self.read.resp_payload.eq(self.read.resp_payload | (self.port.data << 16)),
                         valid.eq(1),
                     ]
                     m.next = "init"
                 with m.Else():
                     # unaligned word
-                    m.d.sync += self.read.value.eq(self.read.value[8:] | (self.port.data << 8))
+                    m.d.sync += self.read.resp_payload.eq(self.read.resp_payload[8:] | (self.port.data << 8))
                     m.next = "coll2"
 
             with m.State("coll2"):
                 m.d.sync += [
-                    self.read.value.eq(self.read.value | (self.port.data[:8] << 24)),
+                    self.read.resp_payload.eq(self.read.resp_payload | (self.port.data[:8] << 24)),
                     valid.eq(1),
                 ]
                 m.next = "init"
@@ -234,7 +234,7 @@ class MMUWrite(Component):
     def elaborate(self, platform):
         m = Module()
 
-        m.d.sync += self.write.rdy.eq(1)
+        m.d.sync += self.write.req_ready.eq(1)
         if self.uart:
             m.d.sync += self.uart.wr.valid.eq(0)
 
@@ -242,35 +242,35 @@ class MMUWrite(Component):
             with m.State("init"):
                 m.d.sync += self.port.en.eq(0)
 
-                with m.If(self.write.ack):
-                    with m.Switch(self.write.width):
+                with m.If(self.write.req_valid):
+                    with m.Switch(self.write.req_width):
                         with m.Case(AccessWidth.BYTE):
                             m.d.sync += [
-                                self.port.addr.eq(self.write.addr >> 1),
-                                self.port.data.eq(self.write.data[:8].replicate(2)),
-                                self.port.en.eq(Mux(self.write.addr[0], 0b10, 0b01)),
+                                self.port.addr.eq(self.write.req_addr >> 1),
+                                self.port.data.eq(self.write.req_payload[:8].replicate(2)),
+                                self.port.en.eq(Mux(self.write.req_addr[0], 0b10, 0b01)),
                             ]
                             if self.uart:
-                                with m.If(self.write.addr == MMU.UART_OFFSET):
+                                with m.If(self.write.req_addr == MMU.UART_OFFSET):
                                     m.d.sync += [
-                                        self.uart.wr.payload.eq(self.write.data[:8]),
+                                        self.uart.wr.payload.eq(self.write.req_payload[:8]),
                                         self.uart.wr.valid.eq(1),
                                         self.port.en.eq(0),
                                     ]
 
                         with m.Case(AccessWidth.HALF):
-                            m.d.sync += self.port.addr.eq(self.write.addr >> 1)
-                            with m.If(~self.write.addr[0]):
+                            m.d.sync += self.port.addr.eq(self.write.req_addr >> 1)
+                            with m.If(~self.write.req_addr[0]):
                                 m.d.sync += [
-                                    self.port.data.eq(self.write.data[:16]),
+                                    self.port.data.eq(self.write.req_payload[:16]),
                                     self.port.en.eq(0b11),
                                 ]
                             with m.Else():
                                 # unaligned
                                 m.d.sync += [
-                                    self.write.rdy.eq(0),
+                                    self.write.req_ready.eq(0),
                                     self.port.data.eq(
-                                        Cat(self.write.data[8:16], self.write.data[:8])
+                                        Cat(self.write.req_payload[8:16], self.write.req_payload[:8])
                                     ),
                                     self.port.en.eq(0b10),
                                 ]
@@ -278,18 +278,18 @@ class MMUWrite(Component):
 
                         with m.Case(AccessWidth.WORD):
                             m.d.sync += [
-                                self.write.rdy.eq(0),
-                                self.port.addr.eq(self.write.addr >> 1),
+                                self.write.req_ready.eq(0),
+                                self.port.addr.eq(self.write.req_addr >> 1),
                             ]
-                            with m.If(~self.write.addr[0]):
+                            with m.If(~self.write.req_addr[0]):
                                 m.d.sync += [
-                                    self.port.data.eq(self.write.data[:16]),
+                                    self.port.data.eq(self.write.req_payload[:16]),
                                     self.port.en.eq(0b11),
                                 ]
                                 m.next = "word"
                             with m.Else():
                                 m.d.sync += [
-                                    self.port.data.eq(Cat(C(0, 8), self.write.data[:8])),
+                                    self.port.data.eq(Cat(C(0, 8), self.write.req_payload[:8])),
                                     self.port.en.eq(0b10),
                                 ]
                                 m.next = "word.unaligned"
@@ -304,16 +304,16 @@ class MMUWrite(Component):
             with m.State("word"):
                 m.d.sync += [
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.data[16:]),
+                    self.port.data.eq(self.write.req_payload[16:]),
                     self.port.en.eq(0b11),
                 ]
                 m.next = "init"
 
             with m.State("word.unaligned"):
                 m.d.sync += [
-                    self.write.rdy.eq(0),
+                    self.write.req_ready.eq(0),
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.data[8:24]),
+                    self.port.data.eq(self.write.req_payload[8:24]),
                     self.port.en.eq(0b11),
                 ]
                 m.next = "word.unaligned.fish"
@@ -321,7 +321,7 @@ class MMUWrite(Component):
             with m.State("word.unaligned.fish"):
                 m.d.sync += [
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.data[24:]),
+                    self.port.data.eq(self.write.req_payload[24:]),
                     self.port.en.eq(0b01),
                 ]
                 m.next = "init"

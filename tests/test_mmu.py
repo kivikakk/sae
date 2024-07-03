@@ -15,8 +15,8 @@ def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
         print(
             f"{prefix}MR: "
-            f"a={ctx.get(mr.read.addr):0>8x}  w={AccessWidth(ctx.get(mr.read.width))}  "
-            f"v={ctx.get(mr.read.value):0>8x}  v={ctx.get(mr.read.valid):b}        ",
+            f"a={ctx.get(mr.read.req_addr):0>8x}  w={AccessWidth(ctx.get(mr.read.req_width))}  "
+            f"v={ctx.get(mr.read.resp_payload):0>8x}  v={ctx.get(mr.read.resp_valid):b}        ",
             end="",
         )
         if sysmem:
@@ -27,8 +27,8 @@ def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
     if mw:
         print(
             f"{prefix}MW: "
-            f"a={ctx.get(mw.write.addr):0>8x}  w={AccessWidth(ctx.get(mw.write.width))}  "
-            f"d={ctx.get(mw.write.data):0>8x}  r={ctx.get(mw.write.rdy):b}  a={ctx.get(mw.write.ack):b}   ",
+            f"a={ctx.get(mw.write.req_addr):0>8x}  w={AccessWidth(ctx.get(mw.write.req_width))}  "
+            f"d={ctx.get(mw.write.req_payload):0>8x}  r={ctx.get(mw.write.req_ready):b}  a={ctx.get(mw.write.req_valid):b}   ",
             end="",
         )
         if sysmem and not mr:
@@ -77,21 +77,21 @@ class TestBase:
             ticks += 1
 
         async def bench(ctx, *, mmu, mr, mw):
-            assert ctx.get(mmu.read.rdy)
-            ctx.set(mmu.read.addr, addr)
-            ctx.set(mmu.read.width, width)
-            ctx.set(mmu.read.ack, 1)
+            assert ctx.get(mmu.read.req_ready)
+            ctx.set(mmu.read.req_addr, addr)
+            ctx.set(mmu.read.req_width, width)
+            ctx.set(mmu.read.req_valid, 1)
             await ctx.tick()
-            ctx.set(mmu.read.ack, 0)
+            ctx.set(mmu.read.req_valid, 0)
             await self.waitFor(
                 ctx,
-                mmu.read.valid,
+                mmu.read.resp_valid,
                 change_to=1,
                 ticks=ticks,
                 mr=mr,
                 sysmem=mmu.sysmem,
             )
-            self.assertEqual(value, ctx.get(mmu.read.value))
+            self.assertEqual(value, ctx.get(mmu.read.resp_payload))
 
         self.simTestbench(bench, mem)
 
@@ -103,18 +103,18 @@ class TestBase:
             ticks += 1
 
         async def bench(ctx, *, mmu, mw, mr):
-            ctx.set(mmu.write.width, width)
-            ctx.set(mmu.write.addr, addr)
-            ctx.set(mmu.write.data, value)
+            ctx.set(mmu.write.req_width, width)
+            ctx.set(mmu.write.req_addr, addr)
+            ctx.set(mmu.write.req_payload, value)
             await self.waitFor(
-                ctx, mmu.write.rdy, change_to=1, ticks=1, mw=mw, sysmem=mmu.sysmem
+                ctx, mmu.write.req_ready, change_to=1, ticks=1, mw=mw, sysmem=mmu.sysmem
             )
-            ctx.set(mmu.write.ack, 1)
+            ctx.set(mmu.write.req_valid, 1)
             await ctx.tick()
-            ctx.set(mmu.write.ack, 0)
+            ctx.set(mmu.write.req_valid, 0)
             await self.waitFor(
                 ctx,
-                mmu.write.rdy,
+                mmu.write.req_ready,
                 change_to=1,
                 ticks=ticks,
                 mw=mw,
