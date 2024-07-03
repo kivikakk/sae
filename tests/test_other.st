@@ -183,9 +183,4 @@ test_ecall:
 test_ebreak:
     .init
     ebreak
-    .assert
-
-    .init
-    li x1, 1
-    ebreak
     .assert x1=0x77774444

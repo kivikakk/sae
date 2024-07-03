@@ -58,7 +58,7 @@ class Hart(Elaboratable):
     fault_code: Signal
     fault_insn: Signal
 
-    xreg: Array[Signal]
+    xmem: Memory
     xreg_written: Optional[Array[Signal]]
     pc: Signal
     insn: Signal
@@ -80,8 +80,11 @@ class Hart(Elaboratable):
         self.fault_code = Signal(FaultCode)
         self.fault_insn = Signal(self.ILEN)
 
-        self.xreg = Array(
-            Signal(self.XLEN, init=self.reg_reset(xn)) for xn in range(self.XCOUNT)
+        # TODO: don't allocate for x0. Probably cheaper just to take it though ..
+        self.xmem = Memory(
+            depth=self.XCOUNT,
+            shape=self.XLEN,
+            init=[self.reg_reset(xn) for xn in range(self.XCOUNT)],
         )
         if self.track_reg_written:
             self.xreg_written = Array(Signal() for _ in range(self.XCOUNT))
@@ -139,8 +142,16 @@ class Hart(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        m.d.sync += self.rb_val1.eq(self.xreg[self.rb_reg1]) # TODO: try these comb when we're not close to maxing out cells.
-        m.d.sync += self.rb_val2.eq(self.xreg[self.rb_reg2])
+        xmem = m.submodules.xmem = self.xmem
+        xmem_write = xmem.write_port()
+        xmem_read1 = xmem.read_port()
+        xmem_read2 = xmem.read_port()
+
+        m.d.sync += xmem_write.en.eq(0)
+        m.d.comb += xmem_read1.addr.eq(self.rb_reg1)
+        m.d.comb += self.rb_val1.eq(xmem_read1.data)
+        m.d.comb += xmem_read2.addr.eq(self.rb_reg2)
+        m.d.comb += self.rb_val2.eq(xmem_read2.data)
 
         with m.FSM() as fsm:
             m.d.comb += self.resolving.eq(fsm.ongoing("fetch.resolve"))
@@ -148,7 +159,9 @@ class Hart(Elaboratable):
             with m.State("fetch.init"):
                 with m.If(self.wb_reg != 0):
                     m.d.sync += [
-                        self.xreg[self.wb_reg].eq(self.wb_val),
+                        xmem_write.addr.eq(self.wb_reg),
+                        xmem_write.data.eq(self.wb_val),
+                        xmem_write.en.eq(1),
                         self.wb_reg.eq(0),
                     ]
                     if self.track_reg_written:
@@ -264,7 +277,7 @@ class Hart(Elaboratable):
                                     with m.Case(OpSystemFunct.ECALL >> 3):
                                         m.d.sync += self.write_xreg(1, 0x1234CAFE)
                                     with m.Case(OpSystemFunct.EBREAK >> 3):
-                                        m.d.sync += self.xreg[1].eq(0x77774444)
+                                        m.d.sync += self.write_xreg(1, 0x77774444)
                                     with m.Default():
                                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                             with m.Default():
@@ -427,8 +440,6 @@ class Hart(Elaboratable):
 
             with m.State("faulted"):
                 m.d.comb += self.state.eq(State.FAULTED)
-
-        m.d.sync += self.xreg[0].eq(0)
 
         return m
 

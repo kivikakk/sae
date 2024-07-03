@@ -61,11 +61,11 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                     end="",
                 )
                 for i in range(1, 32):
-                    v = ctx.get(hart.xreg[i])
+                    v = ctx.get(hart.xmem.data[i])
                     if i in written or v:
                         written.add(i)
                         rn = Reg[f"X{i}"].friendly
-                        print(f"  {rn}={ctx.get(hart.xreg[i]):08x}", end="")
+                        print(f"  {rn}={ctx.get(hart.xmem.data[i]):08x}", end="")
                 print()
                 pms(
                     ctx,
@@ -79,7 +79,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
         results["pc"] = ctx.get(hart.pc)
         for i in range(1, 32):
             if not hart.track_reg_written or ctx.get(hart.xreg_written[i]):
-                results[Reg[f"X{i}"]] = ctx.get(hart.xreg[i])
+                results[Reg[f"X{i}"]] = ctx.get(hart.xmem.data[i])
         results["faultcode"] = ctx.get(hart.fault_code)
         results["faultinsn"] = ctx.get(hart.fault_insn)
         if uart:
