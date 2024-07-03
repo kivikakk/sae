@@ -1,10 +1,5 @@
 # TODO
 
-## µ-architecture
-
-* Separate ALU, try to make this thing smaller and build faster.
-  * **Next**: This implies making the design pipelined! OK.
-
 ## ISA
 
 * RV32E

@@ -2,7 +2,7 @@ from itertools import islice
 from pathlib import Path
 from typing import Optional
 
-from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal, signed
+from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal
 from amaranth.lib.enum import IntEnum
 from amaranth.lib.io import Pin
 from amaranth.lib.memory import Memory
