@@ -139,7 +139,7 @@ class Hart(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        m.d.sync += self.rb_val1.eq(self.xreg[self.rb_reg1]) # TODO: try these comb?
+        m.d.sync += self.rb_val1.eq(self.xreg[self.rb_reg1]) # TODO: try these comb when we're not close to maxing out cells.
         m.d.sync += self.rb_val2.eq(self.xreg[self.rb_reg2])
 
         with m.FSM() as fsm:
@@ -187,7 +187,14 @@ class Hart(Elaboratable):
 
                 with m.Switch(v_i.opcode):
                     with m.Case(Opcode.LOAD):
-                        m.d.sync += self.read_xreg1(v_i.rs1)
+                        imm = Signal(self.XLEN)
+                        funct3 = Signal(3)
+                        m.d.sync += [
+                            self.read_xreg1(v_i.rs1),
+                            imm.eq(v_i.imm),
+                            funct3.eq(v_i.funct3),
+                            self.wb_reg.eq(v_i.rd),
+                        ]
                         m.next = "op.load.wait"
                     with m.Case(Opcode.MISC_MEM):
                         with m.Switch(v_i.funct3):
@@ -196,7 +203,12 @@ class Hart(Elaboratable):
                             with m.Default():
                                 self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
                     with m.Case(Opcode.OP_IMM):
-                        m.d.sync += self.read_xreg1(v_i.rs1)
+                        m.d.sync += [
+                            self.read_xreg1(v_i.rs1),
+                            imm.eq(v_i.imm),
+                            funct3.eq(v_i.funct3),
+                            self.wb_reg.eq(v_i.rd),
+                        ]
                         m.next = "op.op_imm.wait"
                     with m.Case(Opcode.OP):
                         m.d.sync += [
@@ -248,14 +260,13 @@ class Hart(Elaboratable):
             with m.State("op.load.wait"):
                 m.next = "op.load"
             with m.State("op.load"):
-                addr = self.rb_val1 + v_i.imm.as_signed()
+                addr = self.rb_val1 + imm[:12].as_signed()
                 m.d.sync += [
                     mmu.read.addr.eq(addr),
-                    mmu.read.width.eq(v_i.funct3[:2]),
+                    mmu.read.width.eq(funct3[:2]),
                     mmu.read.ack.eq(1),
-                    self.wb_reg.eq(v_i.rd),
                 ]
-                with m.Switch(v_i.funct3):
+                with m.Switch(funct3):
                     with m.Case(OpLoadFunct.LW):
                         m.next = "lw.delay"
                     with m.Case(OpLoadFunct.LH):
@@ -274,13 +285,13 @@ class Hart(Elaboratable):
             with m.State("op.op_imm"):
                 # sx I imm to XLEN
                 v_sxi = Signal(signed(self.XLEN))
-                m.d.comb += v_sxi.eq(v_i.imm.as_signed())
+                m.d.comb += v_sxi.eq(imm[:12].as_signed())
 
                 out = Signal(self.XLEN)
-                m.d.sync += self.write_xreg(v_i.rd, out)
+                m.d.sync += self.wb_val.eq(out)
 
                 m.next = "fetch.init"
-                with m.Switch(v_i.funct3):
+                with m.Switch(funct3):
                     with m.Case(OpImmFunct.ADDI):
                         m.d.comb += out.eq(self.rb_val1 + v_sxi)
                     with m.Case(OpImmFunct.SLTI):
@@ -294,11 +305,11 @@ class Hart(Elaboratable):
                     with m.Case(OpImmFunct.XORI):
                         m.d.comb += out.eq(self.rb_val1 ^ v_sxi)
                     with m.Case(OpImmFunct.SLLI):
-                        m.d.comb += out.eq(self.rb_val1 << v_i.imm[:5])
+                        m.d.comb += out.eq(self.rb_val1 << imm[:5])
                     with m.Case(OpImmFunct.SRI):
                         rs1 = self.rb_val1
-                        rs1 = Mux(v_i.imm[10], rs1.as_signed(), rs1)
-                        m.d.comb += out.eq(rs1 >> v_i.imm[:5])
+                        rs1 = Mux(imm[10], rs1.as_signed(), rs1)
+                        m.d.comb += out.eq(rs1 >> imm[:5])
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
