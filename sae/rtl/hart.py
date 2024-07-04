@@ -417,6 +417,13 @@ class Hart(Elaboratable):
                 with m.If(mmu.read.resp_valid):
                     p = mmu.read.resp_payload
                     val = Signal(self.XLEN)
+
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(val),
+                    ]
+                    m.next = "fetch.init"
+
                     with m.Switch(funct3):
                         with m.Case(OpLoadFunct.LW):
                             m.d.comb += val.eq(p)
@@ -428,36 +435,8 @@ class Hart(Elaboratable):
                             m.d.comb += val.eq(p[:8].as_signed())
                         with m.Case(OpLoadFunct.LBU):
                             m.d.comb += val.eq(p[:8])
-
-                    m.d.sync += [
-                        self.xwr_en.eq(1),
-                        self.xwr_val.eq(val),
-                    ]
-                    m.next = "fetch.init"
-
-            with m.State("lhu.wait"):
-                with m.If(mmu.read.resp_valid):
-                    m.d.sync += [
-                        self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.resp_payload[:16]),
-                    ]
-                    m.next = "fetch.init"
-
-            with m.State("lb.wait"):
-                with m.If(mmu.read.resp_valid):
-                    m.d.sync += [
-                        self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.resp_payload[:8].as_signed()),
-                    ]
-                    m.next = "fetch.init"
-
-            with m.State("lbu.wait"):
-                with m.If(mmu.read.resp_valid):
-                    m.d.sync += [
-                        self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.resp_payload[:8]),
-                    ]
-                    m.next = "fetch.init"
+                        with m.Default():
+                            self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
             with m.State("s.wait"):
                 with m.If(mmu.write.req_ready):
