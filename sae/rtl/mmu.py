@@ -53,11 +53,11 @@ class MMU(Component):
     sysmem: memory.Memory
     peripherals: list[object]
 
-    def __init__(self, *, sysmem):
+    def __init__(self, *, sysmem, peripherals=[]):
         super().__init__()
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
-        self.peripherals = []
+        self.peripherals = peripherals
 
     def elaborate(self, platform):
         m = Module()

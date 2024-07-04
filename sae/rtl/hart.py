@@ -146,9 +146,11 @@ class Hart(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem)
         self.uart = UART(self.plat_uart)
-        mmu.peripherals.append(self.uart)
+        self.mmu = mmu = m.submodules.mmu = MMU(
+            sysmem=self.sysmem,
+            peripherals=[self.uart],
+        )
 
         m.d.comb += mmu.write.req.valid.eq(0)
 
