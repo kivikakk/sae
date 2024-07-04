@@ -149,7 +149,7 @@ class Hart(Elaboratable):
         self.uart = uart = m.submodules.uart = UART(self.plat_uart)
 
         self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem, uart=uart)
-        m.d.comb += mmu.write.req_valid.eq(0)
+        m.d.comb += mmu.write.req.valid.eq(0)
 
         xmem = m.submodules.xmem = self.xmem
         # This ends up duplicating the RAM cells for both read ports.
@@ -180,16 +180,16 @@ class Hart(Elaboratable):
             # TODO: start next fetch as soon as a given instruction allows it.
             with m.State("fetch.init"):
                 m.d.comb += [
-                    mmu.read.req_addr.eq(self.pc),
-                    mmu.read.req_width.eq(AccessWidth.WORD),
-                    mmu.read.req_valid.eq(1),
+                    mmu.read.req.payload.addr.eq(self.pc),
+                    mmu.read.req.payload.width.eq(AccessWidth.WORD),
+                    mmu.read.req.valid.eq(1),
                 ]
-                with m.If(mmu.read.req_ready):
+                with m.If(mmu.read.req.ready):
                     m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
-                with m.If(mmu.read.resp_valid):
-                    insn = mmu.read.resp_payload
+                with m.If(mmu.read.resp.valid):
+                    insn = mmu.read.resp.payload
                     m.d.sync += self.insn.eq(insn)
 
                     with m.If(~insn[:16].any() | insn.all()):
@@ -306,9 +306,9 @@ class Hart(Elaboratable):
             with m.State("op.load"):
                 addr = self.xrd1_val + imm
                 m.d.comb += [
-                    mmu.read.req_addr.eq(addr),
-                    mmu.read.req_width.eq(funct3[:2]),
-                    mmu.read.req_valid.eq(1),
+                    mmu.read.req.payload.addr.eq(addr),
+                    mmu.read.req.payload.width.eq(funct3[:2]),
+                    mmu.read.req.valid.eq(1),
                 ]
                 m.next = "l.wait"
 
@@ -360,20 +360,20 @@ class Hart(Elaboratable):
             with m.State("op.store"):
                 addr = self.xrd1_val + imm
                 m.d.comb += [
-                    mmu.write.req_addr.eq(addr),
-                    mmu.write.req_payload.eq(self.xrd2_val),
-                    mmu.write.req_valid.eq(1),
+                    mmu.write.req.payload.addr.eq(addr),
+                    mmu.write.req.payload.data.eq(self.xrd2_val),
+                    mmu.write.req.valid.eq(1),
                 ]
-                with m.If(mmu.write.req_ready):
+                with m.If(mmu.write.req.ready):
                     m.next = "s.wait"
 
                 with m.Switch(funct3):
                     with m.Case(OpStoreFunct.SW):
-                        m.d.comb += mmu.write.req_width.eq(AccessWidth.WORD)
+                        m.d.comb += mmu.write.req.payload.width.eq(AccessWidth.WORD)
                     with m.Case(OpStoreFunct.SH):
-                        m.d.comb += mmu.write.req_width.eq(AccessWidth.HALF)
+                        m.d.comb += mmu.write.req.payload.width.eq(AccessWidth.HALF)
                     with m.Case(OpStoreFunct.SB):
-                        m.d.comb += mmu.write.req_width.eq(AccessWidth.BYTE)
+                        m.d.comb += mmu.write.req.payload.width.eq(AccessWidth.BYTE)
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
@@ -414,8 +414,8 @@ class Hart(Elaboratable):
                     ]
 
             with m.State("l.wait"):
-                with m.If(mmu.read.resp_valid):
-                    p = mmu.read.resp_payload
+                with m.If(mmu.read.resp.valid):
+                    p = mmu.read.resp.payload
                     val = Signal(self.XLEN)
 
                     m.d.sync += [
@@ -439,7 +439,7 @@ class Hart(Elaboratable):
                             self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
             with m.State("s.wait"):
-                with m.If(mmu.write.req_ready):
+                with m.If(mmu.write.req.ready):
                     # The one-cycle propagation delay here means we can count on
                     # the write being finished by the next read.
                     m.next = "fetch.init"
