@@ -146,9 +146,10 @@ class Hart(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        self.uart = uart = m.submodules.uart = UART(self.plat_uart)
+        self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem)
+        self.uart = UART(self.plat_uart)
+        mmu.peripherals.append(self.uart)
 
-        self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem, uart=uart)
         m.d.comb += mmu.write.req.valid.eq(0)
 
         xmem = m.submodules.xmem = self.xmem
@@ -414,6 +415,9 @@ class Hart(Elaboratable):
                     ]
 
             with m.State("l.wait"):
+                # Keep the address selected so the MMU knows where the request is routed.
+                m.d.comb += mmu.read.req.payload.addr.eq(addr)
+
                 with m.If(mmu.read.resp.valid):
                     p = mmu.read.resp.payload
                     val = Signal(self.XLEN)
@@ -439,6 +443,8 @@ class Hart(Elaboratable):
                             self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
             with m.State("s.wait"):
+                # As above.
+                m.d.comb += mmu.write.req.payload.addr.eq(addr)
                 with m.If(mmu.write.req.ready):
                     # The one-cycle propagation delay here means we can count on
                     # the write being finished by the next read.

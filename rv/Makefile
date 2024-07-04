@@ -8,9 +8,9 @@ ASFLAGS = -march=rv32i -mabi=ilp32
 CFLAGS  = -march=rv32i -mabi=ilp32 -O2
 LDFLAGS = -m elf32lriscv -T linker.ld
 
-all: ../sae/rtl/test_shrimple.bin ../sae/rtl/test_shrimprw.bin
+all: ../tests/test_shrimple.bin ../tests/test_shrimprw.bin
 
-../sae/rtl/test_%.bin: %.bin
+../tests/test_%.bin: %.bin
 	cp $< $@
 
 %.bin: %.exe

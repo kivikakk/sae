@@ -6,9 +6,7 @@ from amaranth.lib.enum import Enum
 from amaranth.lib.wiring import Component, In, Out, Signature, connect
 from amaranth.utils import ceil_log2
 
-from .uart import UART
-
-__all__ = ["MMU", "AccessWidth"]
+__all__ = ["AccessWidth", "MMU", "MMUReadBusSignature", "MMUWriteBusSignature", "Peripheral"]
 
 
 class AccessWidth(Enum, shape=2):
@@ -48,20 +46,18 @@ class MMUWriteBusSignature(Signature):
 
 
 class MMU(Component):
-    UART_OFFSET = 0x0001_0000
-
     read: In(MMUReadBusSignature(32, 32))
     write: In(MMUWriteBusSignature(32, 32))
     mmu_read: "MMURead"
     mmu_write: "MMUWrite"
     sysmem: memory.Memory
-    uart: Optional[UART]
+    peripherals: list[object]
 
-    def __init__(self, *, sysmem, uart=None):
+    def __init__(self, *, sysmem):
         super().__init__()
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
-        self.uart = uart
+        self.peripherals = []
 
     def elaborate(self, platform):
         m = Module()
@@ -70,13 +66,15 @@ class MMU(Component):
         rp = sysmem.read_port()
         wp = sysmem.write_port(granularity=8)
 
-        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem, uart=self.uart)
-        connect(m, self.read, mmu_read.read)
+        self.mmu_read = m.submodules.mmu_read = mmu_read = MMURead(sysmem=sysmem)
         connect(m, rp, mmu_read.port)
+        with m.If(~self.read.req.payload.addr[31]):
+            connect(m, self.read, mmu_read.read)
 
-        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem, uart=self.uart)
-        connect(m, self.write, mmu_write.write)
+        self.mmu_write = m.submodules.mmu_write = mmu_write = MMUWrite(sysmem=sysmem)
         connect(m, wp, mmu_write.port)
+        with m.If(~self.write.req.payload.addr[31]):
+            connect(m, self.write, mmu_write.write)
 
         # TODO: if we want to support SPRAM on main memory. Note that we can't
         # init it, so there needs to be some other way of doing that. (Note also
@@ -85,20 +83,28 @@ class MMU(Component):
         #
         # m.d.comb += rp.en.eq(~wp.en.any())
 
+        # XXX: the below is all pretty much not there for initiating
+        # ready/valid, is it?
+        for p in self.peripherals:
+            pc = p.connection()
+            m.submodules += pc
+
+            with m.If(self.read.req.payload.addr[31] & (self.read.req.payload.addr[:8] == pc.CID)):
+                connect(m, self.read, pc.read)
+            with m.If(self.write.req.payload.addr[31] & (self.write.req.payload.addr[:8] == pc.CID)):
+                connect(m, self.write, pc.write)
+
         return m
 
 
 class MMURead(Component):
-    uart: Optional[UART]
-
-    def __init__(self, *, sysmem, uart=None):
+    def __init__(self, *, sysmem):
         super().__init__({
             "read": Out(MMUReadBusSignature(32, 32)),
             "port": In(memory.ReadPort.Signature(
                 addr_width=ceil_log2(sysmem.depth), shape=sysmem.shape
             )),
         })
-        self.uart = uart
 
     def elaborate(self, platform):
         m = Module()
@@ -139,31 +145,6 @@ class MMURead(Component):
                         req_width.eq(self.read.req.payload.width),
                     ]
                     m.next = "pipe"
-
-                    if self.uart:
-                        with m.If(
-                            (self.read.req.payload.width == AccessWidth.BYTE)
-                            & (self.read.req.payload.addr == MMU.UART_OFFSET)
-                        ):
-                            with m.If(self.uart.rd.valid):
-                                m.d.sync += [
-                                    self.uart.rd.ready.eq(1),
-                                    self.read.resp.payload.eq(self.uart.rd.payload),
-                                    valid.eq(1),
-                                ]
-                                m.next = "uart.dessert"
-                            with m.Else():
-                                m.d.sync += [
-                                    self.read.resp.payload.eq(0),
-                                    valid.eq(1),  # ideally we actually identify there's nothing to read!
-                                ]
-                                m.next = "uart.dessert"  # XXX probably unnecessary
-
-            if self.uart:
-                with m.State("uart.dessert"):
-                    # may not need this state at all.
-                    m.d.sync += self.uart.rd.ready.eq(0)
-                    m.next = "init"
 
             with m.State("pipe"):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
@@ -227,9 +208,7 @@ class MMURead(Component):
 
 
 class MMUWrite(Component):
-    uart: Optional[UART]
-
-    def __init__(self, *, sysmem, uart=None):
+    def __init__(self, *, sysmem):
         super().__init__({
             "write": Out(MMUWriteBusSignature(32, 32)),
             "port": In(memory.WritePort.Signature(
@@ -238,14 +217,11 @@ class MMUWrite(Component):
                 granularity=8,
             )),
         })
-        self.uart = uart
 
     def elaborate(self, platform):
         m = Module()
 
         m.d.sync += self.write.req.ready.eq(1)
-        if self.uart:
-            m.d.sync += self.uart.wr.valid.eq(0)
 
         req_payload = Signal.like(self.write.req.payload.data)
 
@@ -261,13 +237,6 @@ class MMUWrite(Component):
                                 self.port.data.eq(self.write.req.payload.data[:8].replicate(2)),
                                 self.port.en.eq(Mux(self.write.req.payload.addr[0], 0b10, 0b01)),
                             ]
-                            if self.uart:
-                                with m.If(self.write.req.payload.addr == MMU.UART_OFFSET):
-                                    m.d.sync += [
-                                        self.uart.wr.payload.eq(self.write.req.payload.data[:8]),
-                                        self.uart.wr.valid.eq(1),
-                                        self.port.en.eq(0),
-                                    ]
 
                         with m.Case(AccessWidth.HALF):
                             m.d.sync += self.port.addr.eq(self.write.req.payload.addr >> 1)

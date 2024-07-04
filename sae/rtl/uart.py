@@ -4,8 +4,61 @@ from amaranth.lib.fifo import SyncFIFOBuffered
 from amaranth.lib.wiring import Component, In, Out
 from amaranth_stdio.serial import AsyncSerial
 
+from .mmu import MMUReadBusSignature, MMUWriteBusSignature
+
 __all__ = ["UART"]
 
+
+class UARTConnection(Component):
+    CID = 0x01
+
+    read: Out(MMUReadBusSignature(32, 32))
+    write: Out(MMUWriteBusSignature(32, 32))
+
+    uart: "UART"
+
+    def __init__(self, uart):
+        super().__init__()
+        self.uart = uart
+
+    def elaborate(self, platform):
+        m = Module()
+
+        m.submodules.uart = self.uart
+
+        with m.FSM():
+            with m.State("init"):
+                m.d.comb += self.read.req.ready.eq(1)
+
+                with m.If(self.read.req.valid):
+                    with m.If(self.uart.rd.valid):
+                        m.d.sync += [
+                            self.uart.rd.ready.eq(1),
+                            self.read.resp.payload.eq(self.uart.rd.payload),
+                            self.read.resp.valid.eq(1),
+                        ]
+                        m.next = "deassert"
+                    with m.Else():
+                        # TODO: signal nothing to read.
+                        m.d.sync += self.read.resp.payload.eq(0)
+                        m.next = "deassert"  # XXX probably unnecessary
+
+            with m.State("deassert"):
+                m.d.sync += self.uart.rd.ready.eq(0)
+                m.next = "init"
+
+        m.d.comb += self.write.req.ready.eq(1)
+        m.d.sync += self.uart.wr.valid.eq(0) # TODO: combover
+
+        with m.FSM():
+            with m.State("init"):
+                with m.If(self.write.req.valid):
+                    m.d.sync += [
+                        self.uart.wr.payload.eq(self.write.req.payload.data[:8]),
+                        self.uart.wr.valid.eq(1),
+                    ]
+
+        return m
 
 class UART(Component):
     wr: In(stream.Signature(8))
@@ -20,6 +73,9 @@ class UART(Component):
         self._plat_uart = plat_uart
         self._baud = baud
         super().__init__()
+
+    def connection(self):
+        return UARTConnection(self)
 
     def elaborate(self, platform):
         m = Module()

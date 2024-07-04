@@ -47,7 +47,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                     ctx.set(hart.uart.rd.payload, uart_buffer[0])
                     uart_buffer = uart_buffer[1:]
                 else:
-                    print("core read from empty UART")
+                    print(f"core read from empty UART ({uart_buffer!r})")
                     ctx.set(hart.uart.rd.payload, 0)
                     ctx.set(hart.uart.rd.valid, 0)
 
@@ -69,8 +69,8 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                 print()
                 pms(
                     ctx,
-                    mr=hart.mmu.mmu_read,
-                    mw=hart.mmu.mmu_write,
+                    mr=hart.mmu.read,
+                    mw=hart.mmu.write,
                     sysmem=hart.sysmem,
                     prefix="  ",
                 )

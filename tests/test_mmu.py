@@ -15,8 +15,8 @@ def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
     if mr:
         print(
             f"{prefix}MR: "
-            f"a={ctx.get(mr.read.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.read.req.payload.width))}  "
-            f"v={ctx.get(mr.read.resp.payload):0>8x}  v={ctx.get(mr.read.resp.valid):b}        ",
+            f"a={ctx.get(mr.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.req.payload.width)).name}  "
+            f"v={ctx.get(mr.resp.payload):0>8x}  v={ctx.get(mr.resp.valid):b}        ",
             end="",
         )
         if sysmem:
@@ -27,8 +27,8 @@ def pms(ctx, *, mr=None, mw=None, sysmem=None, prefix=""):
     if mw:
         print(
             f"{prefix}MW: "
-            f"a={ctx.get(mw.write.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.write.req.payload.width))}  "
-            f"d={ctx.get(mw.write.req.payload.data):0>8x}  r={ctx.get(mw.write.req.ready):b}  a={ctx.get(mw.write.req.valid):b}   ",
+            f"a={ctx.get(mw.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.req.payload.width)).name}  "
+            f"d={ctx.get(mw.req.payload.data):0>8x}  r={ctx.get(mw.req.ready):b}  a={ctx.get(mw.req.valid):b}   ",
             end="",
         )
         if sysmem and not mr:
@@ -136,7 +136,7 @@ class TestMMU(unittest.TestCase, TestBase):
         mmu = MMU(sysmem=Memory(depth=len(init), shape=16, init=init))
         sim = Simulator(Fragment.get(mmu, platform=test()))
         sim.add_clock(1e-6)
-        sim.add_testbench(partial(bench, mmu=mmu, mr=mmu.mmu_read, mw=mmu.mmu_write))
+        sim.add_testbench(partial(bench, mmu=mmu, mr=mmu.read, mw=mmu.write))
         sim.run()
 
     def test_read(self):
