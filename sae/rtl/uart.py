@@ -40,7 +40,10 @@ class UARTConnection(Component):
                         m.next = "deassert"
                     with m.Else():
                         # TODO: signal nothing to read.
-                        m.d.sync += self.read.resp.payload.eq(0)
+                        m.d.sync += [
+                            self.read.resp.payload.eq(0),
+                            self.read.resp.valid.eq(1),
+                        ]
                         m.next = "deassert"  # XXX probably unnecessary
 
             with m.State("deassert"):
