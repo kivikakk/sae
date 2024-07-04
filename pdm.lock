@@ -239,11 +239,11 @@ files = [
 
 [[package]]
 name = "niar"
-version = "0.1.1"
+version = "0.1.2.dev18"
 requires_python = ">=3.8"
 git = "https://github.com/kivikakk/niar"
 ref = "main"
-revision = "6ff5e58dbf220d4ace18d212bf5baca643fda499"
+revision = "bb65ae312c75a51533605d3a3c1f39215861ff27"
 summary = "A small framework for building projects with Amaranth"
 groups = ["default"]
 dependencies = [
