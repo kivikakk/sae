@@ -236,7 +236,7 @@ class Hart(Elaboratable):
                             self.read_xreg1(v_i.rs1),
                             imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
-                            # funct7[0] normally never set, so we use it to signal IMM to ALU.
+                            # funct7[0] never set by OP_IMM or OP; use to signal IMM to ALU.
                             funct7.eq(1),
                             self.xwr_reg.eq(v_i.rd),
                         ]
@@ -310,23 +310,10 @@ class Hart(Elaboratable):
                     mmu.read.req_width.eq(funct3[:2]),
                     mmu.read.req_valid.eq(1),
                 ]
-                with m.Switch(funct3):
-                    with m.Case(OpLoadFunct.LW):
-                        m.next = "lw.wait"
-                    with m.Case(OpLoadFunct.LH):
-                        m.next = "lh.wait"
-                    with m.Case(OpLoadFunct.LHU):
-                        m.next = "lhu.wait"
-                    with m.Case(OpLoadFunct.LB):
-                        m.next = "lb.wait"
-                    with m.Case(OpLoadFunct.LBU):
-                        m.next = "lbu.wait"
-                    with m.Default():
-                        self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
+                m.next = "l.wait"
 
             with m.State("alu.wait"):
                 m.next = "alu"
-
             with m.State("alu"):
                 out = Signal(self.XLEN)
                 m.d.sync += [
@@ -337,15 +324,14 @@ class Hart(Elaboratable):
                 alu_a = self.xrd1_val
                 alu_b = Signal(self.XLEN)
 
+                m.d.comb += alu_b.eq(self.xrd2_val)
                 with m.If(funct7[0]):
                     m.d.comb += alu_b.eq(imm)
-                with m.Else():
-                    m.d.comb += alu_b.eq(self.xrd2_val)
-                    with m.If(funct7[5]):
-                        with m.If(funct3 == OpRegFunct.ADDSUB):
-                            m.d.comb += alu_b.eq(-self.xrd2_val)
-                        with m.If(funct3 == OpRegFunct.SR):
-                            m.d.comb += alu_b.eq(Cat(self.xrd2_val[:5], C(0, 5), C(1, 1)))
+                with m.If(funct7[5]):
+                    with m.If(funct3 == OpRegFunct.ADDSUB):
+                        m.d.comb += alu_b.eq(-self.xrd2_val)
+                    with m.Elif(funct3 == OpRegFunct.SR):
+                        m.d.comb += alu_b.eq(Cat(self.xrd2_val[:5], C(0, 5), C(1, 1)))
 
                 m.next = "fetch.init"
                 with m.Switch(funct3):
@@ -426,6 +412,28 @@ class Hart(Elaboratable):
                         self.xwr_en.eq(1),
                         self.xwr_val.eq(self.pc),
                     ]
+
+            with m.State("l.wait"):
+                with m.If(mmu.read.resp_valid):
+                    p = mmu.read.resp_payload
+                    val = Signal(self.XLEN)
+                    with m.Switch(funct3):
+                        with m.Case(OpLoadFunct.LW):
+                            m.d.comb += val.eq(p)
+                        with m.Case(OpLoadFunct.LH):
+                            m.d.comb += val.eq(p[:16].as_signed())
+                        with m.Case(OpLoadFunct.LHU):
+                            m.d.comb += val.eq(p[:16])
+                        with m.Case(OpLoadFunct.LB):
+                            m.d.comb += val.eq(p[:8].as_signed())
+                        with m.Case(OpLoadFunct.LBU):
+                            m.d.comb += val.eq(p[:8])
+
+                    m.d.sync += [
+                        self.xwr_en.eq(1),
+                        self.xwr_val.eq(val),
+                    ]
+                    m.next = "fetch.init"
 
             with m.State("lw.wait"):
                 with m.If(mmu.read.resp_valid):
