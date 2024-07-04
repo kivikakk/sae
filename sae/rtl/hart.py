@@ -435,14 +435,6 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("lh.wait"):
-                with m.If(mmu.read.resp_valid):
-                    m.d.sync += [
-                        self.xwr_en.eq(1),
-                        self.xwr_val.eq(mmu.read.resp_payload[:16].as_signed()),
-                    ]
-                    m.next = "fetch.init"
-
             with m.State("lhu.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
