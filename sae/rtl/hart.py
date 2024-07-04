@@ -236,9 +236,11 @@ class Hart(Elaboratable):
                             self.read_xreg1(v_i.rs1),
                             imm.eq(v_i.imm.as_signed()),
                             funct3.eq(v_i.funct3),
+                            # funct7[0] normally never set, so we use it to signal IMM to ALU.
+                            funct7.eq(1),
                             self.xwr_reg.eq(v_i.rd),
                         ]
-                        m.next = "op.op_imm.wait"
+                        m.next = "alu.wait"
                     with m.Case(Opcode.OP):
                         m.d.sync += [
                             self.read_xreg1(v_r.rs1),
@@ -247,7 +249,7 @@ class Hart(Elaboratable):
                             funct7.eq(v_r.funct7),
                             self.xwr_reg.eq(v_r.rd),
                         ]
-                        m.next = "op.op.wait"
+                        m.next = "alu.wait"
                     with m.Case(Opcode.LUI):
                         m.d.sync += self.write_xreg(v_u.rd, v_u.imm << 12)
                     with m.Case(Opcode.AUIPC):
@@ -322,50 +324,50 @@ class Hart(Elaboratable):
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
-            with m.State("op.op_imm.wait"):
-                m.next = "op.op_imm"
-            with m.State("op.op_imm"):
+            with m.State("alu.wait"):
+                m.next = "alu"
+
+            with m.State("alu"):
                 out = Signal(self.XLEN)
                 m.d.sync += [
                     self.xwr_val.eq(out),
                     self.xwr_en.eq(1),
                 ]
 
+                alu_a = self.xrd1_val
+                alu_b = Signal(self.XLEN)
+
+                with m.If(funct7[0]):
+                    m.d.comb += alu_b.eq(imm)
+                with m.Else():
+                    m.d.comb += alu_b.eq(self.xrd2_val)
+                    with m.If(funct7[5]):
+                        with m.If(funct3 == OpRegFunct.ADDSUB):
+                            m.d.comb += alu_b.eq(-self.xrd2_val)
+                        with m.If(funct3 == OpRegFunct.SR):
+                            m.d.comb += alu_b.eq(Cat(self.xrd2_val[:5], C(0, 5), C(1, 1)))
+
                 m.next = "fetch.init"
-                # "ALU".
                 with m.Switch(funct3):
                     with m.Case(OpImmFunct.ADDI):
-                        m.d.comb += out.eq(self.xrd1_val + imm)
+                        m.d.comb += out.eq(alu_a + alu_b)
                     with m.Case(OpImmFunct.SLTI):
-                        m.d.comb += out.eq(self.xrd1_val.as_signed() < imm.as_signed())
+                        m.d.comb += out.eq(alu_a.as_signed() < alu_b.as_signed())
                     with m.Case(OpImmFunct.SLTIU):
-                        m.d.comb += out.eq(self.xrd1_val < imm)
+                        m.d.comb += out.eq(alu_a < alu_b)
                     with m.Case(OpImmFunct.ANDI):
-                        m.d.comb += out.eq(self.xrd1_val & imm)
+                        m.d.comb += out.eq(alu_a & alu_b)
                     with m.Case(OpImmFunct.ORI):
-                        m.d.comb += out.eq(self.xrd1_val | imm)
+                        m.d.comb += out.eq(alu_a | alu_b)
                     with m.Case(OpImmFunct.XORI):
-                        m.d.comb += out.eq(self.xrd1_val ^ imm)
+                        m.d.comb += out.eq(alu_a ^ alu_b)
                     with m.Case(OpImmFunct.SLLI):
-                        m.d.comb += out.eq(self.xrd1_val << imm[:5])
+                        m.d.comb += out.eq(alu_a << alu_b[:5])
                     with m.Case(OpImmFunct.SRI):
-                        rs1 = self.xrd1_val
-                        rs1 = Mux(imm[10], rs1.as_signed(), rs1)
-                        m.d.comb += out.eq(rs1 >> imm[:5])
+                        rs1 = Mux(alu_b[10], alu_a.as_signed(), alu_a)
+                        m.d.comb += out.eq(rs1 >> alu_b[:5])
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
-
-            with m.State("op.op.wait"):
-                m.next = "op.op"
-            with m.State("op.op"):
-                # We can probably dispatch this better to begin with.
-                m.d.sync += imm.eq(self.xrd2_val)
-                with m.If(funct7[5]):
-                    with m.If(funct3 == OpRegFunct.ADDSUB):
-                        m.d.sync += imm.eq(-self.xrd2_val)
-                    with m.If(funct3 == OpRegFunct.SR):
-                        m.d.sync += imm.eq(Cat(self.xrd2_val[:5], C(0, 5), C(1, 1)))
-                m.next = "op.op_imm"
 
             with m.State("op.store.wait"):
                 m.next = "op.store"
