@@ -1,7 +1,6 @@
 from amaranth import Module
 from amaranth.lib import stream
 from amaranth.lib.fifo import SyncFIFOBuffered
-from amaranth.lib.io import Pin
 from amaranth.lib.wiring import Component, In, Out
 from amaranth_stdio.serial import AsyncSerial
 
@@ -12,7 +11,7 @@ class UART(Component):
     wr: In(stream.Signature(8))
     rd: Out(stream.Signature(8))
 
-    _plat_uart: Pin
+    _plat_uart: object
     _baud: int
     _tx_fifo: SyncFIFOBuffered
     _rx_fifo: SyncFIFOBuffered

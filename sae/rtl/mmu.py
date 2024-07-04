@@ -116,6 +116,9 @@ class MMURead(Component):
         m.d.comb += self.read.req_ready.eq(0)
         m.d.comb += self.read.resp_valid.eq(valid & ~self.read.req_valid)
 
+        req_addr = Signal.like(self.read.req_addr)
+        req_width = Signal.like(self.read.req_width)
+
         with m.FSM():
             with m.State("init"):
                 m.d.comb += self.read.req_ready.eq(1)
@@ -124,6 +127,9 @@ class MMURead(Component):
                     m.d.sync += [
                         valid.eq(0),
                         self.port.addr.eq(self.read.req_addr >> 1),
+
+                        req_addr.eq(self.read.req_addr),
+                        req_width.eq(self.read.req_width),
                     ]
                     m.next = "pipe"
 
@@ -156,8 +162,8 @@ class MMURead(Component):
                 m.d.sync += self.port.addr.eq(self.port.addr + 1)
 
                 with m.If(
-                    (self.read.req_width == AccessWidth.WORD)
-                    | ((self.read.req_width == AccessWidth.HALF) & self.read.req_addr[0])
+                    (req_width == AccessWidth.WORD)
+                    | ((req_width == AccessWidth.HALF) & req_addr[0])
                 ):
                     m.next = "coll0"
                 with m.Else():
@@ -168,9 +174,9 @@ class MMURead(Component):
                 m.d.sync += [
                     self.read.resp_payload.eq(
                         Mux(
-                            self.read.req_width == AccessWidth.HALF,
+                            req_width == AccessWidth.HALF,
                             self.port.data,
-                            self.port.data.word_select(self.read.req_addr[0], 8),
+                            self.port.data.word_select(req_addr[0], 8),
                         )
                     ),
                     valid.eq(1),
@@ -186,14 +192,14 @@ class MMURead(Component):
                 m.next = "coll1"
 
             with m.State("coll1"):
-                with m.If(self.read.req_width == AccessWidth.HALF):
+                with m.If(req_width == AccessWidth.HALF):
                     # unaligned half
                     m.d.sync += [
                         self.read.resp_payload.eq(self.read.resp_payload[8:] | (self.port.data[:8] << 8)),
                         valid.eq(1),
                     ]
                     m.next = "init"
-                with m.Elif(~self.read.req_addr[0]):
+                with m.Elif(~req_addr[0]):
                     # aligned word
                     m.d.sync += [
                         self.read.resp_payload.eq(self.read.resp_payload | (self.port.data << 16)),
@@ -238,6 +244,8 @@ class MMUWrite(Component):
         if self.uart:
             m.d.sync += self.uart.wr.valid.eq(0)
 
+        req_payload = Signal.like(self.write.req_payload)
+
         with m.FSM():
             with m.State("init"):
                 m.d.sync += self.port.en.eq(0)
@@ -273,6 +281,7 @@ class MMUWrite(Component):
                                         Cat(self.write.req_payload[8:16], self.write.req_payload[:8])
                                     ),
                                     self.port.en.eq(0b10),
+                                    req_payload.eq(self.write.req_payload),
                                 ]
                                 m.next = "half.unaligned"
 
@@ -280,6 +289,7 @@ class MMUWrite(Component):
                             m.d.sync += [
                                 self.write.req_ready.eq(0),
                                 self.port.addr.eq(self.write.req_addr >> 1),
+                                req_payload.eq(self.write.req_payload),
                             ]
                             with m.If(~self.write.req_addr[0]):
                                 m.d.sync += [
@@ -304,7 +314,7 @@ class MMUWrite(Component):
             with m.State("word"):
                 m.d.sync += [
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.req_payload[16:]),
+                    self.port.data.eq(req_payload[16:]),
                     self.port.en.eq(0b11),
                 ]
                 m.next = "init"
@@ -313,7 +323,7 @@ class MMUWrite(Component):
                 m.d.sync += [
                     self.write.req_ready.eq(0),
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.req_payload[8:24]),
+                    self.port.data.eq(req_payload[8:24]),
                     self.port.en.eq(0b11),
                 ]
                 m.next = "word.unaligned.fish"
@@ -321,7 +331,7 @@ class MMUWrite(Component):
             with m.State("word.unaligned.fish"):
                 m.d.sync += [
                     self.port.addr.eq(self.port.addr + 1),
-                    self.port.data.eq(self.write.req_payload[24:]),
+                    self.port.data.eq(req_payload[24:]),
                     self.port.en.eq(0b01),
                 ]
                 m.next = "init"

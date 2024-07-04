@@ -3,8 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 from amaranth import Array, C, Cat, Elaboratable, Module, Mux, Shape, Signal
-from amaranth.lib.enum import IntEnum
-from amaranth.lib.io import Pin
+from amaranth.lib.enum import Enum, IntEnum
 from amaranth.lib.memory import Memory
 
 from .mmu import MMU, AccessWidth
@@ -30,7 +29,7 @@ from .uart import UART
 __all__ = ["Hart", "State", "FaultCode"]
 
 
-class State(IntEnum, shape=1):
+class State(Enum, shape=1):
     RUNNING = 0
     FAULTED = 1
 
@@ -51,17 +50,26 @@ class Hart(Elaboratable):
     reg_inits: dict[str, int]
     track_reg_written: bool
 
-    plat_uart: Optional[Pin]
+    plat_uart: Optional[object]
 
     state: Signal
     resolving: Signal
     fault_code: Signal
     fault_insn: Signal
 
-    xmem: Memory
-    xreg_written: Optional[Array[Signal]]
     pc: Signal
     insn: Signal
+
+    xmem: Memory
+    xreg_written: Optional[Array[Signal]]
+    xwr_en: Signal
+    xwr_reg: Signal
+    xwr_val: Signal
+
+    xrd1_reg: Signal
+    xrd1_val: Signal
+    xrd2_reg: Signal
+    xrd2_val: Signal
 
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
@@ -80,6 +88,9 @@ class Hart(Elaboratable):
         self.fault_code = Signal(FaultCode)
         self.fault_insn = Signal(self.ILEN)
 
+        self.pc = Signal(self.XLEN)
+        self.insn = Signal(self.ILEN)
+
         # TODO: don't allocate for x0. Probably cheaper just to take it though ..
         self.xmem = Memory(
             depth=self.XCOUNT,
@@ -88,9 +99,6 @@ class Hart(Elaboratable):
         )
         if self.track_reg_written:
             self.xreg_written = Array(Signal() for _ in range(self.XCOUNT))
-
-        self.pc = Signal(self.XLEN)
-        self.insn = Signal(self.ILEN)
 
         self.xwr_en = Signal()
         self.xwr_reg = Signal(range(self.XCOUNT))
@@ -136,12 +144,12 @@ class Hart(Elaboratable):
     def elaborate(self, platform):
         m = Module()
 
-        uart = self.uart = m.submodules.uart = UART(self.plat_uart)
+        m.d.comb += self.state.eq(State.RUNNING)
+
+        self.uart = uart = m.submodules.uart = UART(self.plat_uart)
 
         self.mmu = mmu = m.submodules.mmu = MMU(sysmem=self.sysmem, uart=uart)
-        m.d.sync += mmu.read.req_valid.eq(0)
-
-        m.d.comb += self.state.eq(State.RUNNING)
+        m.d.comb += mmu.write.req_valid.eq(0)
 
         xmem = m.submodules.xmem = self.xmem
         # This ends up duplicating the RAM cells for both read ports.
@@ -171,12 +179,13 @@ class Hart(Elaboratable):
 
             # TODO: start next fetch as soon as a given instruction allows it.
             with m.State("fetch.init"):
-                m.d.sync += [
+                m.d.comb += [
                     mmu.read.req_addr.eq(self.pc),
                     mmu.read.req_width.eq(AccessWidth.WORD),
                     mmu.read.req_valid.eq(1),
                 ]
-                m.next = "fetch.wait"
+                with m.If(mmu.read.req_ready):
+                    m.next = "fetch.wait"
 
             with m.State("fetch.wait"):
                 with m.If(mmu.read.resp_valid):
@@ -294,22 +303,22 @@ class Hart(Elaboratable):
                 m.next = "op.load"
             with m.State("op.load"):
                 addr = self.xrd1_val + imm
-                m.d.sync += [
+                m.d.comb += [
                     mmu.read.req_addr.eq(addr),
                     mmu.read.req_width.eq(funct3[:2]),
                     mmu.read.req_valid.eq(1),
                 ]
                 with m.Switch(funct3):
                     with m.Case(OpLoadFunct.LW):
-                        m.next = "lw.delay"
+                        m.next = "lw.wait"
                     with m.Case(OpLoadFunct.LH):
-                        m.next = "lh.delay"
+                        m.next = "lh.wait"
                     with m.Case(OpLoadFunct.LHU):
-                        m.next = "lhu.delay"
+                        m.next = "lhu.wait"
                     with m.Case(OpLoadFunct.LB):
-                        m.next = "lb.delay"
+                        m.next = "lb.wait"
                     with m.Case(OpLoadFunct.LBU):
-                        m.next = "lbu.delay"
+                        m.next = "lbu.wait"
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
@@ -362,20 +371,21 @@ class Hart(Elaboratable):
                 m.next = "op.store"
             with m.State("op.store"):
                 addr = self.xrd1_val + imm
-                m.d.sync += [
+                m.d.comb += [
                     mmu.write.req_addr.eq(addr),
                     mmu.write.req_payload.eq(self.xrd2_val),
                     mmu.write.req_valid.eq(1),
                 ]
-                m.next = "s.delay"
+                with m.If(mmu.write.req_ready):
+                    m.next = "s.wait"
 
                 with m.Switch(funct3):
                     with m.Case(OpStoreFunct.SW):
-                        m.d.sync += mmu.write.req_width.eq(AccessWidth.WORD)
+                        m.d.comb += mmu.write.req_width.eq(AccessWidth.WORD)
                     with m.Case(OpStoreFunct.SH):
-                        m.d.sync += mmu.write.req_width.eq(AccessWidth.HALF)
+                        m.d.comb += mmu.write.req_width.eq(AccessWidth.HALF)
                     with m.Case(OpStoreFunct.SB):
-                        m.d.sync += mmu.write.req_width.eq(AccessWidth.BYTE)
+                        m.d.comb += mmu.write.req_width.eq(AccessWidth.BYTE)
                     with m.Default():
                         self.fault(m, FaultCode.ILLEGAL_INSTRUCTION, insn=insn)
 
@@ -415,7 +425,7 @@ class Hart(Elaboratable):
                         self.xwr_val.eq(self.pc),
                     ]
 
-            with m.State("lw.delay"):
+            with m.State("lw.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
@@ -423,7 +433,7 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("lh.delay"):
+            with m.State("lh.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
@@ -431,7 +441,7 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("lhu.delay"):
+            with m.State("lhu.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
@@ -439,7 +449,7 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("lb.delay"):
+            with m.State("lb.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
@@ -447,7 +457,7 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("lbu.delay"):
+            with m.State("lbu.wait"):
                 with m.If(mmu.read.resp_valid):
                     m.d.sync += [
                         self.xwr_en.eq(1),
@@ -455,8 +465,7 @@ class Hart(Elaboratable):
                     ]
                     m.next = "fetch.init"
 
-            with m.State("s.delay"):
-                m.d.sync += mmu.write.req_valid.eq(0)
+            with m.State("s.wait"):
                 with m.If(mmu.write.req_ready):
                     # The one-cycle propagation delay here means we can count on
                     # the write being finished by the next read.
