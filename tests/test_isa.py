@@ -3,8 +3,8 @@ import unittest
 from amaranth import Shape, unsigned
 from amaranth.lib.data import StructLayout
 
-from .isa import ISA
-from .isa_rv32 import RV32I, RV32IC
+from sae.rtl.isa import ISA
+from sae.rtl.isa_rv32 import RV32I, RV32IC
 
 
 class TestISARegs(unittest.TestCase):
