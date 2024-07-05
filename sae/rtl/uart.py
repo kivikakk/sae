@@ -10,15 +10,14 @@ __all__ = ["UART"]
 
 
 class UARTConnection(Component):
-    CID = 0x01
-
     read: Out(MMUReadBusSignature(32, 32))
     write: Out(MMUWriteBusSignature(32, 32))
 
     uart: "UART"
 
-    def __init__(self, uart):
+    def __init__(self, cid, uart):
         super().__init__()
+        self.cid = cid
         self.uart = uart
 
     def elaborate(self, platform):
@@ -77,8 +76,8 @@ class UART(Component):
         self._baud = baud
         super().__init__()
 
-    def connection(self):
-        return UARTConnection(self)
+    def connection(self, cid):
+        return UARTConnection(cid, self)
 
     def elaborate(self, platform):
         m = Module()

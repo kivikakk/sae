@@ -51,9 +51,9 @@ class MMU(Component):
     mmu_read: "MMURead"
     mmu_write: "MMUWrite"
     sysmem: memory.Memory
-    peripherals: list[object]
+    peripherals: dict[int, object]
 
-    def __init__(self, *, sysmem, peripherals=[]):
+    def __init__(self, *, sysmem, peripherals={}):
         super().__init__()
         assert Shape.cast(sysmem.shape).width == 16
         self.sysmem = sysmem
@@ -85,13 +85,13 @@ class MMU(Component):
 
         # XXX: the below is all pretty much not there for initiating
         # ready/valid, is it?
-        for p in self.peripherals:
-            pc = p.connection()
+        for cid, p in self.peripherals.items():
+            pc = p.connection(cid)
             m.submodules += pc
 
-            with m.If(self.read.req.payload.addr[31] & (self.read.req.payload.addr[:8] == pc.CID)):
+            with m.If(self.read.req.payload.addr[31] & (self.read.req.payload.addr[:16] == pc.cid)):
                 connect(m, self.read, pc.read)
-            with m.If(self.write.req.payload.addr[31] & (self.write.req.payload.addr[:8] == pc.CID)):
+            with m.If(self.write.req.payload.addr[31] & (self.write.req.payload.addr[:16] == pc.cid)):
                 connect(m, self.write, pc.write)
 
         return m

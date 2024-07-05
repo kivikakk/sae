@@ -19,37 +19,39 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
     results = {}
 
     async def bench(ctx):
-        uart_buffer = (hart.reg_inits or {}).get("uart")
-        if uart_buffer:
-            ctx.set(hart.uart.rd.valid, 1)
-            ctx.set(hart.uart.rd.payload, uart_buffer[0])
-            uart_buffer = uart_buffer[1:]
+        uart = hart.mmu.peripherals[0x0001]
+
+        uart_send = (hart.reg_inits or {}).get("uart")
+        if uart_send:
+            ctx.set(uart.rd.valid, 1)
+            ctx.set(uart.rd.payload, uart_send[0])
+            uart_send = uart_send[1:]
 
         nonlocal results
         first = True
         cycles = -1
         written = set()
-        uart = bytearray()
+        uart_recv = bytearray()
         while State.RUNNING == ctx.get(hart.state):
             if first:
                 first = False
             else:
                 await ctx.tick()
-            if ctx.get(hart.uart.wr.valid):
-                datum = ctx.get(hart.uart.wr.payload)
+            if ctx.get(uart.wr.valid):
+                datum = ctx.get(uart.wr.payload)
                 print(f"core wrote to UART: 0x{datum:0>2x} '{datum:c}'")
-                uart.append(datum)
-            if ctx.get(hart.uart.rd.ready):
-                if uart_buffer:
+                uart_recv.append(datum)
+            if ctx.get(uart.rd.ready):
+                if uart_send:
                     print(
-                        f"core read from UART: 0x{uart_buffer[0]:0>2x} '{uart_buffer[0]:c}'"
+                        f"core read from UART: 0x{uart_send[0]:0>2x} '{uart_send[0]:c}'"
                     )
-                    ctx.set(hart.uart.rd.payload, uart_buffer[0])
-                    uart_buffer = uart_buffer[1:]
+                    ctx.set(uart.rd.payload, uart_send[0])
+                    uart_send = uart_send[1:]
                 else:
-                    print(f"core read from empty UART ({uart_buffer!r})")
-                    ctx.set(hart.uart.rd.payload, 0)
-                    ctx.set(hart.uart.rd.valid, 0)
+                    print(f"core read from empty UART ({uart_send!r})")
+                    ctx.set(uart.rd.payload, 0)
+                    ctx.set(uart.rd.valid, 0)
 
             if ctx.get(hart.resolving):
                 if cycles == max_cycles:
@@ -82,8 +84,8 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                 results[Reg[f"X{i}"]] = ctx.get(hart.xmem.data[i])
         results["faultcode"] = ctx.get(hart.fault_code)
         results["faultinsn"] = ctx.get(hart.fault_insn)
-        if uart:
-            results["uart"] = bytes(uart)
+        if uart_recv:
+            results["uart"] = bytes(uart_recv)
 
     sim = Simulator(Fragment.get(hart, platform=test()))
     sim.add_clock(1e6)

@@ -46,7 +46,6 @@ class Hart(Elaboratable):
     XCOUNT = 32
 
     sysmem: Memory
-    uart: UART
     reg_inits: dict[str, int]
     track_reg_written: bool
 
@@ -146,10 +145,9 @@ class Hart(Elaboratable):
 
         m.d.comb += self.state.eq(State.RUNNING)
 
-        self.uart = UART(self.plat_uart)
         self.mmu = mmu = m.submodules.mmu = MMU(
             sysmem=self.sysmem,
-            peripherals=[self.uart],
+            peripherals={0x0001: UART(self.plat_uart)},
         )
 
         m.d.comb += mmu.write.req.valid.eq(0)
