@@ -55,7 +55,7 @@ class TestISAILayout(unittest.TestCase):
 
     def test_missing_len(self):
         with self.assertRaisesRegex(
-            ValueError, r"^'sae\..*\.I\.IL' missing len, and no default given\.$"
+            ValueError, r"^'tests\.test_isa\..*\.I\.IL' missing len, and no default given\.$"
         ):
 
             class I(ISA):
@@ -64,7 +64,7 @@ class TestISAILayout(unittest.TestCase):
 
     def test_bad_tuple(self):
         with self.assertRaisesRegex(
-            TypeError, r"^Expected tuple for 'sae\..*\.I\.X', not str\.$"
+            TypeError, r"^Expected tuple for 'tests\.test_isa\..*\.I\.X', not str\.$"
         ):
 
             class I(ISA):
@@ -73,7 +73,7 @@ class TestISAILayout(unittest.TestCase):
 
     def test_bad_field(self):
         with self.assertRaisesRegex(
-            TypeError, r"^Unknown field specifier \[\] in layout of 'sae\..*\.I\.X'\.$"
+            TypeError, r"^Unknown field specifier \[\] in layout of 'tests\.test_isa\..*\.I\.X'\.$"
         ):
 
             class I(ISA):
@@ -119,7 +119,7 @@ class TestISAILayout(unittest.TestCase):
     def test_value_default_overlap(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'sae\..*\.I\.IL' sets the following in both 'values' and 'defaults': \['b', 'c'\]\.$",
+            r"^'tests\.test_isa\..*\.I\.IL' sets the following in both 'values' and 'defaults': \['b', 'c'\]\.$",
         ):
 
             class I(ISA):
@@ -135,7 +135,7 @@ class TestISAILayout(unittest.TestCase):
     def test_default_missing_annotation(self):
         with self.assertRaisesRegex(
             TypeError,
-            r"^Cannot resolve default value for element of 'sae\..*\.I\.IL': 'b'='X'\.$",
+            r"^Cannot resolve default value for element of 'tests\.test_isa\..*\.I\.IL': 'b'='X'\.$",
         ):
 
             class I(ISA):

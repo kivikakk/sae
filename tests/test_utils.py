@@ -64,7 +64,7 @@ def run_until_fault(hart: Hart, *, max_cycles=1000):
                     v = ctx.get(hart.xmem.data[i])
                     if i in written or v:
                         written.add(i)
-                        rn = Reg(f"x{i}").friendly
+                        rn = Reg(f"x{i}").name
                         print(f"  {rn}={ctx.get(hart.xmem.data[i]):08x}", end="")
                 print()
                 print_mmu(ctx, hart.mmu, prefix="  ")

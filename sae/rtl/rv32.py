@@ -57,7 +57,7 @@ def disasm(op):
 
     match opcode:
         case RV32I.Opcode.LOAD:
-            return f"{RV32I.L.Funct(v_i['funct3']).name.lower()} x{v_i['rd']}, {c2foff(12, v_i['imm'])}(x{v_i['rs1']})"
+            return f"{RV32I.I.LFunct(v_i['funct3']).name.lower()} x{v_i['rd']}, {c2foff(12, v_i['imm'])}(x{v_i['rs1']})"
         case RV32I.Opcode.MISC_MEM:
             match v_i["funct3"]:
                 case RV32I.I.MMFunct.FENCE:
