@@ -117,7 +117,6 @@ class StTestCase(unittest.TestCase):
                         if len(opname) == 1:
                             opname += "_"
                         insn = getattr(RV32I, opname)
-                        print("insn is ", insn)
                         if hasattr(insn, "asm_args"):
                             asm_args = insn.asm_args
                         elif inspect.ismethod(insn):
@@ -126,7 +125,6 @@ class StTestCase(unittest.TestCase):
                             asm_args
                         ), f"args {args!r} don't fit insn args {asm_args!r}"
                         args = translate_arg(args, asm_args)
-                        print("calling with args:", args)
                         ops = insn(**args)
                         if not isinstance(ops, list):
                             ops = [ops]

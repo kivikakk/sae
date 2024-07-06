@@ -250,8 +250,6 @@ class ISA(metaclass=ISAMeta):
                     )
 
         def args_for(self, **kwargs):
-            print("self.kwargs", self.kwargs)
-            print("kwargs", kwargs)
             combined = self.do_xfrms(self.kwargs | kwargs)
             for name in combined:
                 if name not in self.ilcls.layout:
@@ -307,7 +305,20 @@ class ISA(metaclass=ISAMeta):
 
         def xfrm(self, xfn, **kwarg_defaults):
             clone = self.clone()
-            parameters = getattr(xfn, "parameters", inspect.signature(xfn).parameters)
+            xfn_sig = inspect.signature(xfn, eval_str=True)
+            # Return annotations can be generated programmatically (see imm_xfrm).
+            return_annotation = getattr(xfn, "return_annotation", xfn_sig.return_annotation)
+            parameters = xfn_sig.parameters
+
+            # Any required parameters are now inputs.
+            for name, p in parameters.items():
+                if p.default is xfn_sig.empty:
+                    clone.asm_args.append(name)
+
+            # Outputs named in the annotation are no longer inputs/arguments.
+            assert return_annotation is not xfn_sig.empty, f"no return annotation on {xfn}"
+            for name in return_annotation:
+                clone.asm_args.remove(name)
 
             @wraps(xfn)
             def pipe(kwargs):
@@ -324,14 +335,8 @@ class ISA(metaclass=ISAMeta):
                 kwargs.update(xfn(**{**kwarg_defaults, **args}))
                 return kwargs
 
-            clone.xfrms.append(pipe)
-            # clone.asm_args. ## RESUME XXX GOOD LUCK
-            print("called xfrm with ", xfn.__name__, ", clone.asm_args is ", clone.asm_args)
-            if xfn.__name__ == "imm_xfrm":
-                new_asm_args = [arg for arg in clone.asm_args if not (arg != "imm" and arg.startswith("imm"))]
-                if len(new_asm_args) < len(clone.asm_args):
-                    clone.asm_args = new_asm_args + ["imm"]
-                    print("changing into: ", clone.asm_args)
+            clone.xfrms.insert(0, pipe)
+
             return clone
 
         def do_xfrms(self, kwargs):

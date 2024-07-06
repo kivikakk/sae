@@ -42,6 +42,20 @@ def c2foff(count, value):
         return f"0x{v:x}"
 
 
+def arg_fence(v):
+    assert not (v & ~0b1111)
+    a = []
+    if v & 0b1000:
+        a.append("i")
+    if v & 0b0100:
+        a.append("o")
+    if v & 0b0010:
+        a.append("r")
+    if v & 0b0001:
+        a.append("w")
+    return "".join(a)
+
+
 def disasm(op):
     v_i = decode(RV32I.I, op)
     v_b = decode(RV32I.B, op)

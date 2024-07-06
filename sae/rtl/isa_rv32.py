@@ -99,6 +99,13 @@ class RV32I(ISA):
                         kwargs[n] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
                 return kwargs
 
+            rets = []
+            for n in cls.layout:
+                if _immsingle.match(n) or _immmulti.match(n):
+                        rets.append(n)
+
+            imm_xfrm.return_annotation = tuple(rets)
+
             return imm_xfrm
 
     class R(IL):
@@ -161,7 +168,7 @@ class RV32I(ISA):
             EBREAK = 0b000000000001000
 
         @staticmethod
-        def shamt_xfrm(shamt, *, imm11_5=0) -> "imm":
+        def shamt_xfrm(shamt, *, imm11_5=0) -> ("imm",):
             assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
             return {"imm": (imm11_5 << 5) | shamt}
 
@@ -180,7 +187,7 @@ class RV32I(ISA):
     RET = JALR.partial(rd="zero", rs1="ra", imm=0)
 
     @staticmethod
-    def rs1off_xfrm(rs1off):
+    def rs1off_xfrm(rs1off) -> ("imm", "rs1"):
         """
         Transforms "rs1off" into "imm" and "rs1".
 
@@ -220,14 +227,14 @@ class RV32I(ISA):
         )
 
     @staticmethod
-    def fence_xfrm(pred, succ, *, fm=0):
+    def fence_xfrm(pred, succ, *, fm=0) -> ("imm",):
         return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
 
     FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
     FENCE_TSO = FENCE.partial(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
 
     @staticmethod
-    def system_xfrm(funct):
+    def system_xfrm(funct) -> ("funct3", "imm"):
         return {"funct3": funct & 0x7, "imm": funct >> 3}
 
     _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(system_xfrm).partial
@@ -263,7 +270,7 @@ class RV32I(ISA):
             SH = 0b001
             SW = 0b010
 
-    _store = S.xfrm(rs1off_xfrm).xfrm(S.imm_xfrm)
+    _store = S.xfrm(S.imm_xfrm).xfrm(rs1off_xfrm)
     SB = _store.partial(funct3=S.Funct.SB)
     SH = _store.partial(funct3=S.Funct.SH)
     SW = _store.partial(funct3=S.Funct.SW)
@@ -301,7 +308,7 @@ class RV32I(ISA):
         layout = ("opcode", "rd", "imm")
 
         @staticmethod
-        def check_xfrm(imm):
+        def check_xfrm(imm) -> ("imm",):
             if imm > 0:
                 assert 0 < imm <= 2**20 - 1, f"imm is {imm}"
             elif imm < 0:
