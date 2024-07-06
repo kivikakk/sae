@@ -163,4 +163,7 @@ class Parser:
         self.fish()
 
     def fish(self):
-        self.results.append((self.test_name, self.test_body))
+        if self.test_name is None:
+            assert self.test_body is None
+        else:
+            self.results.append((self.test_name, self.test_body))

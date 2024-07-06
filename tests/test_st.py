@@ -113,11 +113,19 @@ class StTestCase(unittest.TestCase):
                     case st.Pragma(kind="init", args=args):
                         self.init_st(args)
                     case st.Op(opcode=opcode, args=args):
-                        insn = getattr(RV32I, opcode.upper().replace(".", "_"))
+                        opname = opcode.upper().replace(".", "_")
+                        if len(opname) == 1:
+                            opname += "_"
+                        insn = getattr(RV32I, opname)
+                        print("insn is ", insn)
+                        if hasattr(insn, "asm_args"):
+                            asm_args = insn.asm_args
+                        elif inspect.ismethod(insn):
+                            asm_args = list(inspect.signature(insn).parameters)
                         assert len(args) == len(
-                            insn.asm_args
-                        ), f"args {args!r} don't fit insn args {insn.asm_args!r}"
-                        args = translate_arg(args, insn.asm_args)
+                            asm_args
+                        ), f"args {args!r} don't fit insn args {asm_args!r}"
+                        args = translate_arg(args, asm_args)
                         print("calling with args:", args)
                         ops = insn(**args)
                         if not isinstance(ops, list):

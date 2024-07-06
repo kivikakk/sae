@@ -325,7 +325,13 @@ class ISA(metaclass=ISAMeta):
                 return kwargs
 
             clone.xfrms.append(pipe)
-            clone.asm_args. ## RESUME XXX GOOD LUCK
+            # clone.asm_args. ## RESUME XXX GOOD LUCK
+            print("called xfrm with ", xfn.__name__, ", clone.asm_args is ", clone.asm_args)
+            if xfn.__name__ == "imm_xfrm":
+                new_asm_args = [arg for arg in clone.asm_args if not (arg != "imm" and arg.startswith("imm"))]
+                if len(new_asm_args) < len(clone.asm_args):
+                    clone.asm_args = new_asm_args + ["imm"]
+                    print("changing into: ", clone.asm_args)
             return clone
 
         def do_xfrms(self, kwargs):
