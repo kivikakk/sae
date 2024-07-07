@@ -5,6 +5,8 @@ from amaranth import Shape
 from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
+__all__ = ["ISA", "insn"]
+
 
 class ISA:
     def __init_subclass__(cls):
@@ -198,7 +200,7 @@ class ISA:
                         f"{name!r}, which is not part of its layout."
                     )
 
-        def __call__(self, **kwargs):
+        def value(self, **kwargs):
             args = self.args_for(**kwargs)
             if len(args) < len(self.layout):
                 missing = list(self.layout)
@@ -285,3 +287,21 @@ class ISA:
             clone.xfrms.insert(0, pipe)
 
             return clone
+
+
+def insn(inner):
+    class InsnHelper:
+        def __init__(self):
+            self._needs_finalise = True
+
+        def finalise(self, isa):
+            self.isa = isa
+            parameters = inspect.signature(inner).parameters
+            # Don't take cls along for the ride.
+            self.asm_args = [p.name for p in parameters.values() if p.kind == p.KEYWORD_ONLY]
+
+        @wraps(inner)
+        def value(self, **kwargs):
+            return inner(self.isa, **kwargs)
+
+    return InsnHelper()

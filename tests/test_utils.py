@@ -95,8 +95,7 @@ def run_until_fault_bin(path, *, memory=8192, **kwargs):
 @run_until_fault.register(list)
 def run_until_fault_por(mem, **kwargs):
     return run_until_fault(
-        Hart(sysmem=Memory(depth=len(mem), shape=16, init=mem), **kwargs)
-    )
+        Hart(sysmem=Memory(depth=len(mem), shape=16, init=mem), **kwargs))
 
 
 def print_mmu(ctx, mmu, *, prefix=""):
@@ -105,8 +104,7 @@ def print_mmu(ctx, mmu, *, prefix=""):
         f"{prefix}MR: "
         f"a={ctx.get(mr.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mr.req.payload.width)).name}  " # XXX use value, not name of AW
         f"v={ctx.get(mr.resp.payload):0>8x}  v={ctx.get(mr.resp.valid):b}        ",
-        end="",
-    )
+        end="")
     print("data=", end="")
     for i in range(min(SYSMEM_TO_SHOW, mmu.sysmem.depth)):
         print(f"{ctx.get(mmu.sysmem.data[i]):0>4x} ", end="")
@@ -117,8 +115,7 @@ def print_mmu(ctx, mmu, *, prefix=""):
         f"{prefix}MW: "
         f"a={ctx.get(mw.req.payload.addr):0>8x}  w={AccessWidth(ctx.get(mw.req.payload.width)).name}  "
         f"d={ctx.get(mw.req.payload.data):0>8x}  r={ctx.get(mw.req.ready):b}  a={ctx.get(mw.req.valid):b}   ",
-        end="",
-    )
+        end="")
     print("data=", end="")
     for i in range(SYSMEM_TO_SHOW, min(SYSMEM_TO_SHOW * 2, mmu.sysmem.depth)):
         print(f"{ctx.get(mmu.sysmem.data[i]):0>4x} ", end="")

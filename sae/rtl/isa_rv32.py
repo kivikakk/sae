@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from .isa import ISA
+from .isa import ISA, insn
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -235,19 +235,19 @@ class RV32I(ISA):
     ECALL = _system(funct=I.SFunct.ECALL)
     EBREAK = _system(funct=I.SFunct.EBREAK)
 
-    @classmethod
-    def LI(cls, *, rd, imm):
+    @insn
+    def LI(isa, *, rd, imm):
         if (imm & 0xFFF) == imm:
-            return [cls.ADDI(rd=rd, rs1="x0", imm=imm)]
+            return isa.ADDI.value(rd=rd, rs1="x0", imm=imm)
         if imm & 0x800:
             return [
-                cls.LUI(rd=rd, imm=imm >> 12),
-                cls.ADDI(rd=rd, rs1=rd, imm=(imm & 0xFFF) >> 1),
-                cls.ADDI(rd=rd, rs1=rd, imm=((imm & 0xFFF) >> 1) + int(imm & 1)),
+                isa.LUI.value(rd=rd, imm=imm >> 12),
+                isa.ADDI.value(rd=rd, rs1=rd, imm=(imm & 0xFFF) >> 1),
+                isa.ADDI.value(rd=rd, rs1=rd, imm=((imm & 0xFFF) >> 1) + int(imm & 1)),
             ]
         return [
-            cls.LUI(rd=rd, imm=imm >> 12),
-            cls.ADDI(rd=rd, rs1=rd, imm=imm & 0xFFF),
+            isa.LUI.value(rd=rd, imm=imm >> 12),
+            isa.ADDI.value(rd=rd, rs1=rd, imm=imm & 0xFFF),
         ]
 
     MV = ADDI.partial(imm=0)
@@ -318,7 +318,7 @@ class RV32I(ISA):
         defaults = {"opcode": "JAL"}
 
     JAL = J().xfrm(J.imm_xfrm)
-    J_ = JAL.partial(rd="zero")  # XXX uhm.
+    J_ = JAL.partial(rd="zero")
 
 
 class RV32IC(RV32I):

@@ -117,49 +117,34 @@ class StTestCase(unittest.TestCase):
                         if len(opname) == 1:
                             opname += "_"
                         insn = getattr(RV32I, opname)
-                        if hasattr(insn, "asm_args"):
-                            asm_args = insn.asm_args
-                        elif inspect.ismethod(insn):
-                            asm_args = list(inspect.signature(insn).parameters)
-                        assert len(args) == len(
-                            asm_args
-                        ), f"args {args!r} don't fit insn args {asm_args!r}"
+                        asm_args = insn.asm_args
+                        assert len(args) == len(asm_args), (
+                            f"args {args!r} don't fit insn args {asm_args!r}")
                         args = translate_arg(args, asm_args)
-                        ops = insn(**args)
+                        ops = insn.value(**args)
                         if not isinstance(ops, list):
                             ops = [ops]
                         for op in ops:
                             self._body.append(op & 0xFFFF)
                             self._body.append(op >> 16)
-                    case st.Pragma(kind="assert", args=args) | st.Pragma(
-                        kind="assert~", args=args
-                    ):
+                    case (st.Pragma(kind="assert", args=args) |
+                          st.Pragma(kind="assert~", args=args)):
                         self._rest_unwritten = not line.kind.endswith("~")
                         asserts = parse_pairs(args)
                         if self._results is None:
                             self.run_st_sim()
-                            faultcode = asserts.pop(
-                                "faultcode", FaultCode.ILLEGAL_INSTRUCTION
-                            )
-                            self.assertReg(
-                                "faultcode",
-                                faultcode,
-                            )
-                            self.assertReg(
-                                "faultinsn",
+                            faultcode = asserts.pop("faultcode", FaultCode.ILLEGAL_INSTRUCTION)
+                            self.assertReg("faultcode", faultcode)
+                            self.assertReg("faultinsn",
                                 int(
                                     asserts.pop(
                                         "faultinsn",
-                                        (
-                                            "0xFFFFFFFF"
-                                            if faultcode
-                                            == FaultCode.ILLEGAL_INSTRUCTION
-                                            else "0"
-                                        ),
+                                        ("0xFFFFFFFF"
+                                         if faultcode == FaultCode.ILLEGAL_INSTRUCTION
+                                         else "0"),
                                     ),
                                     0,
-                                ),
-                            )
+                                ))
                         for reg, assign in asserts.items():
                             self.assertReg(reg, assign)
                     case st.Pragma(kind="half", args=[h]):
@@ -168,12 +153,8 @@ class StTestCase(unittest.TestCase):
                         self._body.append(w & 0xFFFF)
                         self._body.append((w >> 16) & 0xFFFF)
                     case st.Pragma(kind="rtf", args=[f, *pairs]):
-                        self.init_st(
-                            pairs,
-                            body=Hart.sysmem_init_for(
-                                Path(__file__).parent / f.decode()
-                            ),
-                        )
+                        self.init_st(pairs,
+                            body=Hart.sysmem_init_for(Path(__file__).parent / f.decode()))
                     case _:
                         print("idk how to handle", line)
                         raise RuntimeError("weh")
@@ -211,9 +192,7 @@ class StTestCase(unittest.TestCase):
         if rn is not None:
             rn = f"{rn!r}="
         if expected is Unwritten or actual is Unwritten:
-            self.assertIs(
-                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
-            )
+            self.assertIs(expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}")
             return
         if isinstance(expected, int):
             if expected < 0:
@@ -221,12 +200,10 @@ class StTestCase(unittest.TestCase):
             self.assertEqual(
                 expected,
                 actual,
-                f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}",
-            )
+                f"expected {rn}0x{expected:X}, actual {rn}0x{actual:X}")
         else:
             self.assertEqual(
-                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}"
-            )
+                expected, actual, f"expected {rn}{expected!r}, actual {rn}{actual!r}")
 
 
 TEST_REPLACEMENT = re.compile(r"(?:\A|[^a-zA-Z0-9]+)[a-zA-Z0-9]")
