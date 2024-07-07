@@ -6,9 +6,8 @@ from amaranth.lib.data import StructLayout
 from amaranth.lib.enum import IntEnum, nonmember
 
 
-class ISAMeta(type):
-    def __new__(mcls, name, bases, namespace):
-        cls = type.__new__(mcls, name, bases, namespace)
+class ISA:
+    def __init_subclass__(cls):
         for name in [*cls.__dict__]:
             obj = cls.__dict__[name]
             if getattr(obj, "_needs_named", False):
@@ -17,10 +16,7 @@ class ISAMeta(type):
                 obj.__fullname__ = f"{cls.__module__}.{cls.__qualname__}.{name}"
             if getattr(obj, "_needs_finalised", False):
                 obj.finalise(cls)
-        return cls
 
-
-class ISA(metaclass=ISAMeta):
     @staticmethod
     def RegisterSpecifier(size, names):
         count = 2**size
