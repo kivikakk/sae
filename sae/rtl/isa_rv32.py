@@ -127,10 +127,10 @@ class RV32I(ISA):
     XOR = R(funct3=R.Funct.XOR)
     SLL = R(funct3=R.Funct.SLL)
     SRL = R(funct3=R.Funct.SR)
-    SUB = ADD.partial(funct7=R.F7Negate)
-    SRA = SRL.partial(funct7=R.F7Negate)
+    SUB = ADD(funct7=R.F7Negate)
+    SRA = SRL(funct7=R.F7Negate)
 
-    SNEZ = SLTU.partial(rs1="zero")
+    SNEZ = SLTU(rs1="zero")
 
     class I(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "imm")
@@ -178,7 +178,7 @@ class RV32I(ISA):
     SRAI = I(funct3=I.IFunct.SRI).xfrm(I.shamt_xfrm, imm11_5=0b0100000)
 
     JALR = I(opcode="JALR", funct3=0)
-    RET = JALR.partial(rd="zero", rs1="ra", imm=0)
+    RET = JALR(rd="zero", rs1="ra", imm=0)
 
     @staticmethod
     def rs1off_xfrm(rs1off) -> ("imm", "rs1"):
@@ -202,7 +202,7 @@ class RV32I(ISA):
             case _:
                 assert False, f"unknown rs1off {rs1off!r}"
 
-    _load = I(opcode="LOAD").xfrm(rs1off_xfrm).partial
+    _load = I(opcode="LOAD").xfrm(rs1off_xfrm)
     LB = _load(funct3=I.LFunct.LB)
     LH = _load(funct3=I.LFunct.LH)
     LW = _load(funct3=I.LFunct.LW)
@@ -225,13 +225,13 @@ class RV32I(ISA):
         return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
 
     FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
-    FENCE_TSO = FENCE.partial(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
+    FENCE_TSO = FENCE(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
 
     @staticmethod
     def system_xfrm(funct) -> ("funct3", "imm"):
         return {"funct3": funct & 0x7, "imm": funct >> 3}
 
-    _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(system_xfrm).partial
+    _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(system_xfrm)
     ECALL = _system(funct=I.SFunct.ECALL)
     EBREAK = _system(funct=I.SFunct.EBREAK)
 
@@ -250,10 +250,10 @@ class RV32I(ISA):
             isa.ADDI.value(rd=rd, rs1=rd, imm=imm & 0xFFF),
         ]
 
-    MV = ADDI.partial(imm=0)
-    SEQZ = SLTIU.partial(imm=1)
-    NOT = XORI.partial(imm=-1)
-    NOP = ADDI.partial(rd="zero", rs1="zero", imm=0)
+    MV = ADDI(imm=0)
+    SEQZ = SLTIU(imm=1)
+    NOT = XORI(imm=-1)
+    NOP = ADDI(rd="zero", rs1="zero", imm=0)
 
     class S(IL):
         layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
@@ -265,9 +265,9 @@ class RV32I(ISA):
             SW = 0b010
 
     _store = S().xfrm(S.imm_xfrm).xfrm(rs1off_xfrm)
-    SB = _store.partial(funct3=S.Funct.SB)
-    SH = _store.partial(funct3=S.Funct.SH)
-    SW = _store.partial(funct3=S.Funct.SW)
+    SB = _store(funct3=S.Funct.SB)
+    SH = _store(funct3=S.Funct.SH)
+    SW = _store(funct3=S.Funct.SW)
 
     class B(IL):
         layout = (
@@ -291,12 +291,12 @@ class RV32I(ISA):
             BGEU = 0b111
 
     _branch = B().xfrm(B.imm_xfrm)
-    BEQ = _branch.partial(funct3=B.Funct.BEQ)
-    BNE = _branch.partial(funct3=B.Funct.BNE)
-    BLT = _branch.partial(funct3=B.Funct.BLT)
-    BGE = _branch.partial(funct3=B.Funct.BGE)
-    BLTU = _branch.partial(funct3=B.Funct.BLTU)
-    BGEU = _branch.partial(funct3=B.Funct.BGEU)
+    BEQ = _branch(funct3=B.Funct.BEQ)
+    BNE = _branch(funct3=B.Funct.BNE)
+    BLT = _branch(funct3=B.Funct.BLT)
+    BGE = _branch(funct3=B.Funct.BGE)
+    BLTU = _branch(funct3=B.Funct.BLTU)
+    BGEU = _branch(funct3=B.Funct.BGEU)
 
     class U(IL):
         layout = ("opcode", "rd", "imm")
@@ -310,15 +310,15 @@ class RV32I(ISA):
             return {"imm": imm}
 
     _upper = U().xfrm(U.check_xfrm)
-    LUI = _upper.partial(opcode="LUI")
-    AUIPC = _upper.partial(opcode="AUIPC")
+    LUI = _upper(opcode="LUI")
+    AUIPC = _upper(opcode="AUIPC")
 
     class J(IL):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
         defaults = {"opcode": "JAL"}
 
     JAL = J().xfrm(J.imm_xfrm)
-    J_ = JAL.partial(rd="zero")
+    J_ = JAL(rd="zero")
 
 
 class RV32IC(RV32I):

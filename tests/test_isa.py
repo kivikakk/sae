@@ -143,9 +143,7 @@ class TestISAInsns(unittest.TestCase):
     def test_bad_define(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'sae\..*\.RV32I\.R child' constructed with argument 'xyz', "
-            r"which is not part of its layout\.$",
-        ):
+            r"^'sae\..*\.RV32I\.R child' given invalid argument 'xyz'."):
             RV32I.R(xyz=1)
 
     def test_bad_call(self):

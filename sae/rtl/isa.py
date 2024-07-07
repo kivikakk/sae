@@ -186,6 +186,11 @@ class ISA:
             self.__fullname__ = f"{type(self).__module__}.{type(self).__qualname__} child"
             self.xfrms = []
 
+            # "valid_args" are those that can be specified in a __call__.
+            self.valid_args = list(self.layout)
+            self.validate_kwargs(kwargs)
+
+            # "asm_args" are those that can be specified in value().
             self.asm_args = list(self.layout)
             for arg in [*self.defaults, *kwargs]:
                 try:
@@ -193,12 +198,22 @@ class ISA:
                 except ValueError:
                     pass
 
+        def validate_kwargs(self, kwargs):
             for name in kwargs:
-                if name not in self.layout:
-                    raise ValueError(
-                        f"'{self.__fullname__}' constructed with argument "
-                        f"{name!r}, which is not part of its layout."
-                    )
+                if name not in self.valid_args:
+                    raise ValueError(f"'{self.__fullname__}' given invalid argument {name!r}.")
+
+        def __call__(self, **kwargs):
+            self.validate_kwargs(kwargs)
+
+            clone = self.clone()
+            clone.kwargs.update(kwargs)
+            for arg in kwargs:
+                try:
+                    clone.asm_args.remove(arg)
+                except ValueError:
+                    pass
+            return clone
 
         def value(self, **kwargs):
             args = self.args_for(**kwargs)
@@ -238,18 +253,8 @@ class ISA:
         def clone(self):
             clone = type(self)(**self.kwargs.copy())
             clone.xfrms = self.xfrms.copy()
+            clone.valid_args = self.valid_args.copy()
             clone.asm_args = self.asm_args.copy()
-            return clone
-
-        def partial(self, **kwargs):
-            # Note that overwriting defaults is allowed in partial().
-            clone = self.clone()
-            clone.kwargs.update(kwargs)
-            for arg in kwargs:
-                try:
-                    clone.asm_args.remove(arg)
-                except ValueError:
-                    pass
             return clone
 
         def xfrm(self, xfn, **kwarg_overrides):
@@ -259,14 +264,16 @@ class ISA:
             return_annotation = getattr(xfn, "return_annotation", xfn_sig.return_annotation)
             parameters = xfn_sig.parameters
 
-            # Any required parameters are now inputs.
+            # All parameters become valid __call__ args. Required parameters become value() args.
             for name, p in parameters.items():
+                clone.valid_args.append(name)
                 if p.default is xfn_sig.empty:
                     clone.asm_args.append(name)
 
-            # Outputs named in the annotation are no longer inputs/arguments.
+            # Outputs named in the annotation are no longer inputs.
             assert return_annotation is not xfn_sig.empty, f"no return annotation on {xfn}"
             for name in return_annotation:
+                clone.valid_args.remove(name)
                 clone.asm_args.remove(name)
 
             @wraps(xfn)
