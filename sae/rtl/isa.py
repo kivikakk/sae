@@ -15,6 +15,7 @@ class ISA:
                 obj.__name__ = name
                 obj.__fullname__ = f"{cls.__module__}.{cls.__qualname__}.{name}"
             if getattr(obj, "_needs_finalise", False):
+                del obj._needs_finalise
                 obj.finalise(cls)
         super().__init_subclass__()
 
@@ -67,6 +68,7 @@ class ISA:
 
         return Register
 
+
     class ILayout:
         def __init_subclass__(cls, len=None):
             if len is not None:
@@ -78,14 +80,10 @@ class ISA:
                 cls._needs_finalise = True
                 if getattr(cls, "len", None) is None:
                     raise ValueError(
-                        f"'{cls.classfullname()}' missing len, and no default given."
+                        f"'{cls.__module__}.{cls.__qualname__}' missing len, and no default given."
                     )
 
             super().__init_subclass__()
-
-        @classmethod
-        def classfullname(cls):
-            return f"{cls.__module__}.{cls.__qualname__}"
 
         @classmethod
         def resolve(cls, name, *args, **kwargs):
@@ -96,12 +94,21 @@ class ISA:
 
         @classmethod
         def finalise(cls, isa):
+            assert hasattr(cls, "layout"), "finalising a non-leaf ILayout"
+            if not isinstance(cls.layout, tuple):
+                raise TypeError(
+                    f"Expected tuple for '{cls.__fullname__}', "
+                    f"not {type(cls.layout).__name__}."
+                )
+
+            # Assemble defining context, used when evaluating annotations.
             context = {}
             for klass in reversed(isa.mro()):
                 context.update(
                     {k: v for k, v in klass.__dict__.items() if not k.startswith("_")}
                 )
 
+            # Assemble annotations of all ILayout subclasses in our hierarchy.
             mro = list(reversed(cls.mro()))
             annotations = {}
             for klass in mro[mro.index(ISA.ILayout) + 1 :]:
@@ -109,13 +116,6 @@ class ISA:
                     inspect.get_annotations(klass, locals=context, eval_str=True)
                 )
 
-            assert hasattr(cls, "layout"), "finalising a non-leaf ILayout"
-
-            if not isinstance(cls.layout, tuple):
-                raise TypeError(
-                    f"Expected tuple for '{cls.__fullname__}', "
-                    f"not {type(cls.layout).__name__}."
-                )
 
             fields = {}
             consumed = 0
@@ -194,20 +194,17 @@ class ISA:
 
         def __init__(self, **kwargs):
             if not hasattr(self, "layout"):
-                raise TypeError(f"'{self.classfullname()}' called, but it's layoutless.")
+                raise TypeError(f"'{type(self).__module__}.{type(self).__qualname__}' called, but it's layoutless.")
 
-            ilcls = type(self)
-            self.ilcls = ilcls
-            self.layout = ilcls.layout
             self.kwargs = kwargs
             self._needs_name = True
-            self.__fullname__ = f"{self.classfullname()} child"
+            self.__fullname__ = f"{type(self).__module__}.{type(self).__qualname__} child"
             self.xfrms = []
 
             self.asm_args = list(self.layout)
             for arg in [
-                *getattr(self.ilcls, "values", []),
-                *getattr(self.ilcls, "defaults", []),
+                *getattr(self, "values", []),
+                *getattr(self, "defaults", []),
                 *kwargs,
             ]:
                 try:
@@ -216,45 +213,21 @@ class ISA:
                     pass
 
             for name in kwargs:
-                if name not in ilcls.layout:
+                if name not in self.layout:
                     raise ValueError(
-                        f"'{self.classfullname()}' called with argument "
+                        f"'{self.__fullname__}' constructed with argument "
                         f"{name!r}, which is not part of its layout."
                     )
-                if name in getattr(ilcls, "values", {}):
+                if name in getattr(self, "values", {}):
                     raise ValueError(
-                        f"{name!r} is already defined for '{self.classfullname()}' "
+                        f"{name!r} is already defined for '{self.__fullname__}' "
                         f"and cannot be overridden."
                     )
 
-        def args_for(self, **kwargs):
-            combined = self.do_xfrms(self.kwargs | kwargs)
-            for name in combined:
-                if name not in self.ilcls.layout:
-                    raise ValueError(
-                        f"'{self.classfullname()}' called with argument "
-                        f"{name!r}, which is not part of its IL's layout."
-                    )
-                if name in kwargs and (
-                    name in self.ilcls.values
-                    or name in self.ilcls.defaults
-                    or name in self.kwargs
-                ):
-                    raise ValueError(
-                        f"{name!r} is already defined for '{self.classfullname()}' "
-                        f"and cannot be overridden in thunk."
-                    )
-
-            return {
-                **self.ilcls.values,
-                **self.ilcls.defaults,
-                **self.ilcls.resolve_values(combined),
-            }
-
         def __call__(self, **kwargs):
             args = self.args_for(**kwargs)
-            if len(args) < len(self.ilcls.layout):
-                missing = list(self.ilcls.layout)
+            if len(args) < len(self.layout):
+                missing = list(self.layout)
                 for name in args:
                     missing.remove(name)
                 raise TypeError(
@@ -262,7 +235,31 @@ class ISA:
                     f"values for arguments: {missing!r}."
                 )
 
-            return self.ilcls.shape.const(args).as_value().value
+            return self.shape.const(args).as_value().value
+
+        def args_for(self, **kwargs):
+            combined = reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, self.kwargs | kwargs)
+            for name in combined:
+                if name not in self.layout:
+                    raise ValueError(
+                        f"'{self.__fullname__}' called with argument "
+                        f"{name!r}, which is not part of its IL's layout."
+                    )
+                if name in kwargs and (
+                    name in self.values
+                    or name in self.defaults
+                    or name in self.kwargs
+                ):
+                    raise ValueError(
+                        f"{name!r} is already defined for '{self.__fullname__}' "
+                        f"and cannot be overridden in thunk."
+                    )
+
+            return {
+                **self.values,
+                **self.defaults,
+                **self.resolve_values(combined),
+            }
 
         def clone(self):
             clone = type(self)(**self.kwargs.copy())
@@ -316,6 +313,3 @@ class ISA:
             clone.xfrms.insert(0, pipe)
 
             return clone
-
-        def do_xfrms(self, kwargs):
-            return reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, kwargs)

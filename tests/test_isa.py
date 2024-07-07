@@ -180,7 +180,7 @@ class TestISAInsns(unittest.TestCase):
     def test_bad_define(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'sae\..*\.RV32I\.R' called with argument 'xyz', "
+            r"^'sae\..*\.RV32I\.R child' constructed with argument 'xyz', "
             r"which is not part of its layout\.$",
         ):
             RV32I.R(xyz=1)
@@ -188,7 +188,7 @@ class TestISAInsns(unittest.TestCase):
     def test_bad_call(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'sae\..*\.RV32I\.R' called with argument 'xyz', "
+            r"^'sae\..*\.RV32I\.R child' called with argument 'xyz', "
             r"which is not part of its IL's layout\.$",
         ):
             RV32I.R()(xyz=1)
@@ -196,16 +196,16 @@ class TestISAInsns(unittest.TestCase):
     def test_bad_define_override(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R' and cannot "
-            r"be overridden\.$",
+            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R child' and "
+            r"cannot be overridden\.$",
         ):
             RV32I.R(opcode=1)
 
     def test_bad_call_override(self):
         with self.assertRaisesRegex(
             ValueError,
-            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R' and cannot "
-            r"be overridden in thunk\.$",
+            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R child' and "
+            r"cannot be overridden in thunk\.$",
         ):
             RV32I.R()(opcode=1)
 
