@@ -163,11 +163,12 @@ class StTestCase(unittest.TestCase):
     def run_st_sim(self):
         hart = Hart(
             sysmem=Memory(
-                depth=len(self._body) + 2, shape=16, init=self._body + [0xFFFF, 0xFFFF]
+                depth=len(self._body) + 2,
+                shape=16,
+                init=self._body + [0xFFFF, 0xFFFF]
             ),
             reg_inits=self._reg_inits,
-            track_reg_written=True,
-        )
+            track_reg_written=True)
         self._results = run_until_fault(hart)
         self._body = None
         self._asserted = set(

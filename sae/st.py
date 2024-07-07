@@ -89,18 +89,15 @@ def parse(tokens, *, line, lineno):
     register = tok("register") >> Register
     assign = -tok("equals") + (number | string)
     register_or_assign = (register | tok("word")) + maybe(assign) >> (
-        lambda p: p[0] if p[1] is None else Assign(*p)
-    )
+        lambda p: p[0] if p[1] is None else Assign(*p))
 
     arg = number | offset | register_or_assign | string | tok("word")
     arglist = maybe(arg + many(-tok("comma") + arg)) >> (
-        lambda p: [] if not p else [p[0]] + p[1]
-    )
+        lambda p: [] if not p else [p[0]] + p[1])
 
     label = tok("label") >> (lambda l: Label(l[:-1]))
     pragma = tok("pragma") + arglist >> (
-        lambda p: Pragma(p[0][1:], p[1], line=line, lineno=lineno)
-    )
+        lambda p: Pragma(p[0][1:], p[1], line=line, lineno=lineno))
     op = tok("word") + arglist >> (lambda p: Op(*p, line=line, lineno=lineno))
 
     stmt = label | pragma | op

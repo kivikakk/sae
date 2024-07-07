@@ -223,8 +223,7 @@ class ISA:
                     missing.remove(name)
                 raise TypeError(
                     f"'{self.__fullname__}' called without supplying "
-                    f"values for arguments: {missing!r}."
-                )
+                    f"values for arguments: {missing!r}.")
 
             return self.shape.const(args).as_value().value
 
@@ -234,16 +233,14 @@ class ISA:
                 if name not in self.layout:
                     raise ValueError(
                         f"'{self.__fullname__}' called with argument "
-                        f"{name!r}, which is not part of its layout."
-                    )
+                        f"{name!r}, which is not part of its layout.")
                 if name in kwargs and (
                     name in self.defaults
                     or name in self.kwargs
                 ):
                     raise ValueError(
                         f"{name!r} is already defined for '{self.__fullname__}' "
-                        f"and cannot be overridden."
-                    )
+                        f"and cannot be overridden.")
 
             return {
                 **self.defaults,
@@ -286,8 +283,7 @@ class ISA:
                         # Default value (in function signature) may be overridden
                         # by kwarg_overrides.
                         args[name] = kwargs.pop(
-                            name, kwarg_overrides.get(name, p.default)
-                        )
+                            name, kwarg_overrides.get(name, p.default))
                 kwargs.update(xfn(**{**kwarg_overrides, **args}))
                 return kwargs
 

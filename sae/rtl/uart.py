@@ -90,8 +90,7 @@ class UART(Component):
 
         m.submodules.serial = serial = AsyncSerial(
             divisor=int(freq // self._baud),
-            pins=self._plat_uart,
-        )
+            pins=self._plat_uart)
 
         # tx
         m.submodules.tx_fifo = self._tx_fifo = SyncFIFOBuffered(width=8, depth=32)

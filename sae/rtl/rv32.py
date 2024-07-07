@@ -118,8 +118,7 @@ def disasm(op):
                 v_b["imm4_1"] << 1
                 | v_b["imm10_5"] << 5
                 | v_b["imm11"] << 11
-                | v_b["imm12"] << 12
-            )
+                | v_b["imm12"] << 12)
             return f"{RV32I.B.Funct(v_b['funct3']).name.lower()} x{v_b['rs1']}, x{v_b['rs2']}, {c2foff(13, imm)}"
         case RV32I.Opcode.JALR:
             return f"jalr x{v_i['rd']}, x{v_i['rs1']}, {c2foff(12, v_i['imm'])}"
@@ -128,8 +127,7 @@ def disasm(op):
                 v_j["imm10_1"] << 1
                 | v_j["imm11"] << 11
                 | v_j["imm19_12"] << 12
-                | v_j["imm20"] << 20
-            )
+                | v_j["imm20"] << 20)
             if v_j["rd"] == 0:
                 return f"j {c2foff(21, imm)}"
             return f"jal x{v_j['rd']}, {c2foff(21, imm)}"

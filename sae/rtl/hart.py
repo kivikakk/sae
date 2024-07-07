@@ -57,8 +57,7 @@ class Hart(Elaboratable):
     def __init__(self, *, sysmem=None, reg_inits=None, track_reg_written=False):
         self.sysmem = sysmem or self.sysmem_for(
             Path(__file__).parent.parent.parent / "tests" / "test_shrimprw.bin",
-            memory=8192,
-        )
+            memory=8192)
         self.reg_inits = reg_inits or {}
         if RV32I.Reg("x1") not in self.reg_inits:
             self.reg_inits[RV32I.Reg("x1")] = 0xFFFF_FFFF  # ensure RET faults
@@ -78,8 +77,7 @@ class Hart(Elaboratable):
         self.xmem = Memory(
             depth=self.XCOUNT,
             shape=self.XLEN,
-            init=[self.reg_reset(xn) for xn in range(self.XCOUNT)],
-        )
+            init=[self.reg_reset(xn) for xn in range(self.XCOUNT)])
         if self.track_reg_written:
             self.xreg_written = Array(Signal() for _ in range(self.XCOUNT))
 
@@ -131,8 +129,7 @@ class Hart(Elaboratable):
 
         self.mmu = mmu = m.submodules.mmu = MMU(
             sysmem=self.sysmem,
-            peripherals={0x0001: UART(self.plat_uart)},
-        )
+            peripherals={0x0001: UART(self.plat_uart)})
 
         m.d.comb += mmu.write.req.valid.eq(0)
 

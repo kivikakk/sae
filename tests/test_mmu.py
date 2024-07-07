@@ -33,14 +33,12 @@ class TestMMU(unittest.TestCase):
             self.assertNotEqual(
                 change_to,
                 ctx.get(s),
-                f"{s.name} changed to {change_to} after {i} tick(s) (out of {ticks})",
-            )
+                f"{s.name} changed to {change_to} after {i} tick(s) (out of {ticks})")
             await ctx.tick()
         self.assertEqual(
             change_to,
             ctx.get(s),
-            f"{s.name} didn't change to {change_to} after {ticks} tick(s)",
-        )
+            f"{s.name} didn't change to {change_to} after {ticks} tick(s)")
         print_mmu(ctx, mmu, prefix=f"  waitFor ({ticks}/{ticks}) -- ")
 
     @mmu_sim
@@ -62,8 +60,7 @@ class TestMMU(unittest.TestCase):
             mmu,
             mmu.read.resp.valid,
             change_to=1,
-            ticks=ticks,
-        )
+            ticks=ticks)
         self.assertEqual(value, ctx.get(mmu.read.resp.payload))
 
     @mmu_sim
@@ -87,8 +84,7 @@ class TestMMU(unittest.TestCase):
             self.assertEqual(
                 ex,
                 ctx.get(s),
-                f"failed at index {i}: omem {ex:0>4x} != sysmem {ctx.get(s):0>4x}",
-            )
+                f"failed at index {i}: omem {ex:0>4x} != sysmem {ctx.get(s):0>4x}")
 
     def test_read(self):
         mem = [0x1234, 0xABCD]
