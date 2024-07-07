@@ -16,6 +16,7 @@ class ISA:
                 obj.__fullname__ = f"{cls.__module__}.{cls.__qualname__}.{name}"
             if getattr(obj, "_needs_finalised", False):
                 obj.finalise(cls)
+        super().__init_subclass__()
 
     @staticmethod
     def RegisterSpecifier(size, names):
@@ -67,24 +68,6 @@ class ISA:
         return Register
 
     class ILayoutMeta(type):
-        def __new__(mcls, name, bases, namespace, len=None):
-            cls = type.__new__(mcls, name, bases, namespace)
-
-            if len is not None:
-                cls.len = len
-
-            if not hasattr(cls, "layout"):
-                # Base class, not a complete instruction layout.
-                return cls
-            cls._needs_finalised = True
-
-            if getattr(cls, "len", None) is None:
-                raise ValueError(
-                    f"'{cls.__fullname__}' missing len, and no default given."
-                )
-
-            return cls
-
         def __call__(cls, *args, **kwargs):
             match args:
                 case ():
@@ -211,7 +194,19 @@ class ISA:
             return cls().xfrm(*args, **kwargs)
 
     class ILayout(metaclass=ILayoutMeta):
-        pass
+        def __init_subclass__(cls, len=None):
+            if len is not None:
+                cls.len = len
+
+            if hasattr(cls, "layout"):
+                # Not a base class.
+                cls._needs_finalised = True
+                if getattr(cls, "len", None) is None:
+                    raise ValueError(
+                        f"'{cls.__fullname__}' missing len, and no default given."
+                    )
+
+            super().__init_subclass__()
 
     class IThunk:
         def __init__(self, ilcls, kwargs):
