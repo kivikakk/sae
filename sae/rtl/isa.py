@@ -145,7 +145,7 @@ class ISA:
                     f"Layout components are excessive (fills {consumed}/{cls.len})."
                 )
 
-            cls._fields = fields
+            cls.fields = fields
 
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
@@ -170,7 +170,7 @@ class ISA:
                     return value
                 case str():
                     try:
-                        field = cls._fields[name]
+                        field = cls.fields[name]
                         try:
                             return field[value]
                         except KeyError:
@@ -183,7 +183,7 @@ class ISA:
                 case _:
                     assert False, (
                         f"unhandled resolving '{cls.__fullname__}': "
-                        f"{name!r}={value!r} (fields={cls._fields!r})"
+                        f"{name!r}={value!r} (fields={cls.fields!r})"
                     )
 
         @classmethod
