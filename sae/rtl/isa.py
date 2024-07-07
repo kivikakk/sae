@@ -24,12 +24,10 @@ class ISA:
         count = 2**size
         if len(names) < count:
             raise ValueError(
-                f"Register naming is inadequate (named {len(names)}/{count})."
-            )
+                f"Register naming is inadequate (named {len(names)}/{count}).")
         elif len(names) > count:
             raise ValueError(
-                f"Register naming is excessive (named {len(names)}/{count})."
-            )
+                f"Register naming is excessive (named {len(names)}/{count}).")
 
         members = {}
         mappings = {}
@@ -70,6 +68,9 @@ class ISA:
 
 
     class ILayout:
+        values = {}
+        defaults = {}
+
         def __init_subclass__(cls, len=None):
             if len is not None:
                 cls.len = len
@@ -80,8 +81,8 @@ class ISA:
                 cls._needs_finalise = True
                 if getattr(cls, "len", None) is None:
                     raise ValueError(
-                        f"'{cls.__module__}.{cls.__qualname__}' missing len, and no default given."
-                    )
+                        f"'{cls.__module__}.{cls.__qualname__}' missing len, "
+                        f"and no default given.")
 
             super().__init_subclass__()
 
@@ -89,8 +90,7 @@ class ISA:
         def resolve(cls, name, *args, **kwargs):
             raise ValueError(
                 f"Field specifier {name!r} not registered, and "
-                f"no 'resolve' implementation available."
-            )
+                f"no 'resolve' implementation available.")
 
         @classmethod
         def finalise(cls, isa):
@@ -98,25 +98,23 @@ class ISA:
             if not isinstance(cls.layout, tuple):
                 raise TypeError(
                     f"Expected tuple for '{cls.__fullname__}', "
-                    f"not {type(cls.layout).__name__}."
-                )
+                    f"not {type(cls.layout).__name__}.")
 
             # Assemble defining context, used when evaluating annotations.
             context = {}
             for klass in reversed(isa.mro()):
-                context.update(
-                    {k: v for k, v in klass.__dict__.items() if not k.startswith("_")}
-                )
+                context.update({k: v for k, v in klass.__dict__.items() if not k.startswith("_")})
 
             # Assemble annotations of all ILayout subclasses in our hierarchy.
             mro = list(reversed(cls.mro()))
             annotations = {}
             for klass in mro[mro.index(ISA.ILayout) + 1 :]:
-                annotations.update(
-                    inspect.get_annotations(klass, locals=context, eval_str=True)
-                )
+                annotations.update(inspect.get_annotations(klass, locals=context, eval_str=True))
 
-
+            # Evaluate fields elements' shapes: either `(name, shape)` tuples
+            # (fully-specified), or `name` where it matches an annotation (which
+            # defines its shape). If there's no match, try the class's `resolve`
+            # method.
             fields = {}
             consumed = 0
             for i, elem in enumerate(cls.layout):
@@ -125,8 +123,7 @@ class ISA:
                     elem = elem[0]
                 elif not isinstance(elem, str):
                     raise TypeError(
-                        f"Unknown field specifier {elem!r} in layout of '{cls.__fullname__}'."
-                    )
+                        f"Unknown field specifier {elem!r} in layout of '{cls.__fullname__}'.")
                 elif ty := annotations.get(elem, None):
                     fields[elem] = ty
                 else:
@@ -138,20 +135,18 @@ class ISA:
 
             if consumed < cls.len:
                 raise ValueError(
-                    f"Layout components are inadequate (fills {consumed}/{cls.len})."
-                )
+                    f"Layout components are inadequate (fills {consumed}/{cls.len}).")
             elif consumed > cls.len:
                 raise ValueError(
-                    f"Layout components are excessive (fills {consumed}/{cls.len})."
-                )
+                    f"Layout components are excessive (fills {consumed}/{cls.len}).")
 
             cls.fields = fields
 
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
 
-            cls.values = cls.resolve_values(getattr(cls, "values", {}))
-            cls.defaults = cls.resolve_values(getattr(cls, "defaults", {}))
+            cls.values = cls.resolve_values(cls.values)
+            cls.defaults = cls.resolve_values(cls.defaults)
 
             overlap = []
             for name in cls.layout:
@@ -160,8 +155,11 @@ class ISA:
             if overlap:
                 raise ValueError(
                     f"'{cls.__fullname__}' sets the following in both "
-                    f"'values' and 'defaults': {overlap!r}."
-                )
+                    f"'values' and 'defaults': {overlap!r}.")
+
+        @classmethod
+        def resolve_values(cls, values):
+            return {name: cls.resolve_value(name, value) for name, value in values.items()}
 
         @classmethod
         def resolve_value(cls, name, value):
@@ -171,6 +169,7 @@ class ISA:
                 case str():
                     try:
                         field = cls.fields[name]
+                        # Try item access, then calling (e.g. for Enum _missing_).
                         try:
                             return field[value]
                         except KeyError:
@@ -182,19 +181,14 @@ class ISA:
                         ) from e
                 case _:
                     assert False, (
-                        f"unhandled resolving '{cls.__fullname__}': "
-                        f"{name!r}={value!r} (fields={cls.fields!r})"
-                    )
-
-        @classmethod
-        def resolve_values(cls, values):
-            return {
-                name: cls.resolve_value(name, value) for name, value in values.items()
-            }
+                        f"unhandled type resolving '{cls.__fullname__}': "
+                        f"{name!r}={value!r} (fields={cls.fields!r})")
 
         def __init__(self, **kwargs):
             if not hasattr(self, "layout"):
-                raise TypeError(f"'{type(self).__module__}.{type(self).__qualname__}' called, but it's layoutless.")
+                raise TypeError(
+                    f"'{type(self).__module__}.{type(self).__qualname__}' "
+                    f"called, but it's layoutless.")
 
             self.kwargs = kwargs
             self._needs_name = True
@@ -202,11 +196,7 @@ class ISA:
             self.xfrms = []
 
             self.asm_args = list(self.layout)
-            for arg in [
-                *getattr(self, "values", []),
-                *getattr(self, "defaults", []),
-                *kwargs,
-            ]:
+            for arg in [*self.values, *self.defaults, *kwargs]:
                 try:
                     self.asm_args.remove(arg)
                 except ValueError:
@@ -218,7 +208,7 @@ class ISA:
                         f"'{self.__fullname__}' constructed with argument "
                         f"{name!r}, which is not part of its layout."
                     )
-                if name in getattr(self, "values", {}):
+                if name in self.values:
                     raise ValueError(
                         f"{name!r} is already defined for '{self.__fullname__}' "
                         f"and cannot be overridden."
@@ -278,7 +268,7 @@ class ISA:
                     pass
             return clone
 
-        def xfrm(self, xfn, **kwarg_defaults):
+        def xfrm(self, xfn, **kwarg_overrides):
             clone = self.clone()
             xfn_sig = inspect.signature(xfn, eval_str=True)
             # Return annotations can be generated programmatically (see imm_xfrm).
@@ -303,11 +293,11 @@ class ISA:
                         args[name] = kwargs.pop(name)
                     else:
                         # Default value (in function signature) may be overridden
-                        # by kwarg_defaults.
+                        # by kwarg_overrides.
                         args[name] = kwargs.pop(
-                            name, kwarg_defaults.get(name, p.default)
+                            name, kwarg_overrides.get(name, p.default)
                         )
-                kwargs.update(xfn(**{**kwarg_defaults, **args}))
+                kwargs.update(xfn(**{**kwarg_overrides, **args}))
                 return kwargs
 
             clone.xfrms.insert(0, pipe)
