@@ -68,7 +68,6 @@ class ISA:
 
 
     class ILayout:
-        values = {}
         defaults = {}
 
         def __init_subclass__(cls, len=None):
@@ -145,17 +144,7 @@ class ISA:
             cls.shape = StructLayout(fields)
             cls.shape.__name__ = cls.__name__
 
-            cls.values = cls.resolve_values(cls.values)
             cls.defaults = cls.resolve_values(cls.defaults)
-
-            overlap = []
-            for name in cls.layout:
-                if name in cls.values and name in cls.defaults:
-                    overlap.append(name)
-            if overlap:
-                raise ValueError(
-                    f"'{cls.__fullname__}' sets the following in both "
-                    f"'values' and 'defaults': {overlap!r}.")
 
         @classmethod
         def resolve_values(cls, values):
@@ -196,7 +185,7 @@ class ISA:
             self.xfrms = []
 
             self.asm_args = list(self.layout)
-            for arg in [*self.values, *self.defaults, *kwargs]:
+            for arg in [*self.defaults, *kwargs]:
                 try:
                     self.asm_args.remove(arg)
                 except ValueError:
@@ -207,11 +196,6 @@ class ISA:
                     raise ValueError(
                         f"'{self.__fullname__}' constructed with argument "
                         f"{name!r}, which is not part of its layout."
-                    )
-                if name in self.values:
-                    raise ValueError(
-                        f"{name!r} is already defined for '{self.__fullname__}' "
-                        f"and cannot be overridden."
                     )
 
         def __call__(self, **kwargs):
@@ -233,20 +217,18 @@ class ISA:
                 if name not in self.layout:
                     raise ValueError(
                         f"'{self.__fullname__}' called with argument "
-                        f"{name!r}, which is not part of its IL's layout."
+                        f"{name!r}, which is not part of its layout."
                     )
                 if name in kwargs and (
-                    name in self.values
-                    or name in self.defaults
+                    name in self.defaults
                     or name in self.kwargs
                 ):
                     raise ValueError(
                         f"{name!r} is already defined for '{self.__fullname__}' "
-                        f"and cannot be overridden in thunk."
+                        f"and cannot be overridden."
                     )
 
             return {
-                **self.values,
                 **self.defaults,
                 **self.resolve_values(combined),
             }

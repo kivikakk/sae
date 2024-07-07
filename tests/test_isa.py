@@ -51,7 +51,7 @@ class TestISAILayout(unittest.TestCase):
         self.assertEqual(unsigned(32), Shape.cast(RV32I.R.shape))
         self.assertEqual(("opcode", "rd", "imm"), RV32I.U.layout)
 
-        self.assertEqual({"opcode": RV32I.Opcode.OP}, RV32I.R.values)
+        self.assertEqual({"opcode": RV32I.Opcode.OP, "funct7": 0}, RV32I.R.defaults)
 
     def test_missing_len(self):
         with self.assertRaisesRegex(
@@ -116,22 +116,6 @@ class TestISAILayout(unittest.TestCase):
 
                     layout = ("sh1", "sh2", "sh3")
 
-    def test_value_default_overlap(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            r"^'tests\.test_isa\..*\.I\.IL' sets the following in both 'values' and 'defaults': \['b', 'c'\]\.$",
-        ):
-
-            class I(ISA):
-                class IL(ISA.ILayout, len=12):
-                    a: 4
-                    b: 4
-                    c: 4
-
-                    layout = ("a", "b", "c")
-                    values = {"a": 1, "b": 2, "c": 3}
-                    defaults = {"b": 4, "c": 5}
-
     def test_default_missing_annotation(self):
         with self.assertRaisesRegex(
             TypeError,
@@ -143,7 +127,6 @@ class TestISAILayout(unittest.TestCase):
                     a: 4
 
                     layout = ("a", ("b", 4))
-                    values = {"a": 1}
                     defaults = {"b": "X"}
 
 
@@ -189,23 +172,15 @@ class TestISAInsns(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError,
             r"^'sae\..*\.RV32I\.R child' called with argument 'xyz', "
-            r"which is not part of its IL's layout\.$",
+            r"which is not part of its layout\.$",
         ):
             RV32I.R()(xyz=1)
-
-    def test_bad_define_override(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            r"^'opcode' is already defined for 'sae\..*\.RV32I\.R child' and "
-            r"cannot be overridden\.$",
-        ):
-            RV32I.R(opcode=1)
 
     def test_bad_call_override(self):
         with self.assertRaisesRegex(
             ValueError,
             r"^'opcode' is already defined for 'sae\..*\.RV32I\.R child' and "
-            r"cannot be overridden in thunk\.$",
+            r"cannot be overridden\.$",
         ):
             RV32I.R()(opcode=1)
 

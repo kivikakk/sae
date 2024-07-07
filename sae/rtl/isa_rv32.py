@@ -84,7 +84,7 @@ class RV32I(ISA):
         def __init_subclass__(cls):
             super().__init_subclass__()
 
-            def imm_xfrm(imm): # -> ("immX", "immY_Z", ...)
+            def imm_xfrm(imm): # -> ("immX", "immY_X", ...)
                 kwargs = {}
                 for n in cls.layout:
                     if m := _immsingle.match(n):
@@ -105,8 +105,7 @@ class RV32I(ISA):
 
     class R(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
-        values = {"opcode": "OP"}
-        defaults = {"funct7": 0}
+        defaults = {"opcode": "OP", "funct7": 0}
 
         class Funct(IntEnum, shape=3):
             ADDSUB = 0b000
@@ -258,7 +257,7 @@ class RV32I(ISA):
 
     class S(IL):
         layout = ("opcode", "imm4_0", "funct3", "rs1", "rs2", "imm11_5")
-        values = {"opcode": "STORE"}
+        defaults = {"opcode": "STORE"}
 
         class Funct(IntEnum, shape=3):
             SB = 0b000
@@ -281,7 +280,7 @@ class RV32I(ISA):
             "imm10_5",
             "imm12",
         )
-        values = {"opcode": "BRANCH"}
+        defaults = {"opcode": "BRANCH"}
 
         class Funct(IntEnum, shape=3):
             BEQ = 0b000
@@ -316,7 +315,7 @@ class RV32I(ISA):
 
     class J(IL):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
-        values = {"opcode": "JAL"}
+        defaults = {"opcode": "JAL"}
 
     JAL = J().xfrm(J.imm_xfrm)
     J_ = JAL.partial(rd="zero")  # XXX uhm.
