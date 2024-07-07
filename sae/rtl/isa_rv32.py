@@ -81,14 +81,10 @@ class RV32I(ISA):
                 return unsigned(1)
             assert False, f"unhandled: {name!r}"
 
-        @classmethod
-        @property
-        def imm_xfrm(cls):
-            def imm_xfrm(imm):
-                # XXX: this splits out one "imm" argument from an ISA 'caller'
-                # into whatever immX or immY_Z fields the op defines.
-                # Accordingly, asm_args can have all immX and immY_Z replaced by
-                # one imm.
+        def __init_subclass__(cls):
+            super().__init_subclass__()
+
+            def imm_xfrm(imm): # -> ("immX", "immY_Z", ...)
                 kwargs = {}
                 for n in cls.layout:
                     if m := _immsingle.match(n):
@@ -105,8 +101,7 @@ class RV32I(ISA):
                         rets.append(n)
 
             imm_xfrm.return_annotation = tuple(rets)
-
-            return imm_xfrm
+            cls.imm_xfrm = imm_xfrm
 
     class R(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
