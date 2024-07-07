@@ -270,7 +270,7 @@ class RV32I(ISA):
             SH = 0b001
             SW = 0b010
 
-    _store = S.xfrm(S.imm_xfrm).xfrm(rs1off_xfrm)
+    _store = S().xfrm(S.imm_xfrm).xfrm(rs1off_xfrm)
     SB = _store.partial(funct3=S.Funct.SB)
     SH = _store.partial(funct3=S.Funct.SH)
     SW = _store.partial(funct3=S.Funct.SW)
@@ -296,7 +296,7 @@ class RV32I(ISA):
             BLTU = 0b110
             BGEU = 0b111
 
-    _branch = B.xfrm(B.imm_xfrm)
+    _branch = B().xfrm(B.imm_xfrm)
     BEQ = _branch.partial(funct3=B.Funct.BEQ)
     BNE = _branch.partial(funct3=B.Funct.BNE)
     BLT = _branch.partial(funct3=B.Funct.BLT)
@@ -315,7 +315,7 @@ class RV32I(ISA):
                 assert 0 < -imm <= 2**20 - 1, f"imm is {imm}"
             return {"imm": imm}
 
-    _upper = U.xfrm(U.check_xfrm)
+    _upper = U().xfrm(U.check_xfrm)
     LUI = _upper.partial(opcode="LUI")
     AUIPC = _upper.partial(opcode="AUIPC")
 
@@ -323,7 +323,7 @@ class RV32I(ISA):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
         values = {"opcode": "JAL"}
 
-    JAL = J.xfrm(J.imm_xfrm)
+    JAL = J().xfrm(J.imm_xfrm)
     J_ = JAL.partial(rd="zero")  # XXX uhm.
 
 

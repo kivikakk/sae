@@ -10,11 +10,11 @@ class ISA:
     def __init_subclass__(cls):
         for name in [*cls.__dict__]:
             obj = cls.__dict__[name]
-            if getattr(obj, "_needs_named", False):
-                del obj._needs_named
+            if getattr(obj, "_needs_name", False):
+                del obj._needs_name
                 obj.__name__ = name
                 obj.__fullname__ = f"{cls.__module__}.{cls.__qualname__}.{name}"
-            if getattr(obj, "_needs_finalised", False):
+            if getattr(obj, "_needs_finalise", False):
                 obj.finalise(cls)
         super().__init_subclass__()
 
@@ -50,7 +50,7 @@ class ISA:
 
             _mappings = nonmember(mappings)
             _aliases = nonmember(aliases_)
-            _needs_named = nonmember(True)
+            _needs_name = nonmember(True)
 
             @classmethod
             def _missing_(cls, value):
@@ -67,31 +67,34 @@ class ISA:
 
         return Register
 
-    class ILayoutMeta(type):
-        def __call__(cls, *args, **kwargs):
-            match args:
-                case ():
-                    # Can't check for "shape" because this ain't finalised yet.
-                    if not hasattr(cls, "layout"):
-                        raise TypeError(
-                            f"'{cls.__fullname__}' called, but it's layoutless."
-                        )
+    class ILayout:
+        def __init_subclass__(cls, len=None):
+            if len is not None:
+                cls.len = len
 
-                    return ISA.IThunk(cls, kwargs)
+            if hasattr(cls, "layout"):
+                # Not a base class.
+                cls._needs_name = True
+                cls._needs_finalise = True
+                if getattr(cls, "len", None) is None:
+                    raise ValueError(
+                        f"'{cls.classfullname()}' missing len, and no default given."
+                    )
 
-                case _:
-                    assert False
+            super().__init_subclass__()
 
-        @property
-        def __fullname__(self):
-            return f"{self.__module__}.{self.__qualname__}"
+        @classmethod
+        def classfullname(cls):
+            return f"{cls.__module__}.{cls.__qualname__}"
 
+        @classmethod
         def resolve(cls, name, *args, **kwargs):
             raise ValueError(
                 f"Field specifier {name!r} not registered, and "
                 f"no 'resolve' implementation available."
             )
 
+        @classmethod
         def finalise(cls, isa):
             context = {}
             for klass in reversed(isa.mro()):
@@ -160,6 +163,7 @@ class ISA:
                     f"'values' and 'defaults': {overlap!r}."
                 )
 
+        @classmethod
         def resolve_value(cls, name, value):
             match value:
                 case int():
@@ -182,36 +186,22 @@ class ISA:
                         f"{name!r}={value!r} (fields={cls._fields!r})"
                     )
 
+        @classmethod
         def resolve_values(cls, values):
             return {
                 name: cls.resolve_value(name, value) for name, value in values.items()
             }
 
-        def xfrm(cls, *args, **kwargs):
-            return cls().xfrm(*args, **kwargs)
+        def __init__(self, **kwargs):
+            if not hasattr(self, "layout"):
+                raise TypeError(f"'{self.classfullname()}' called, but it's layoutless.")
 
-    class ILayout(metaclass=ILayoutMeta):
-        def __init_subclass__(cls, len=None):
-            if len is not None:
-                cls.len = len
-
-            if hasattr(cls, "layout"):
-                # Not a base class.
-                cls._needs_finalised = True
-                if getattr(cls, "len", None) is None:
-                    raise ValueError(
-                        f"'{cls.__fullname__}' missing len, and no default given."
-                    )
-
-            super().__init_subclass__()
-
-    class IThunk:
-        def __init__(self, ilcls, kwargs):
+            ilcls = type(self)
             self.ilcls = ilcls
             self.layout = ilcls.layout
             self.kwargs = kwargs
-            self._needs_named = True
-            self.__fullname__ = f"{ilcls.__fullname__} child"
+            self._needs_name = True
+            self.__fullname__ = f"{self.classfullname()} child"
             self.xfrms = []
 
             self.asm_args = list(self.layout)
@@ -228,12 +218,12 @@ class ISA:
             for name in kwargs:
                 if name not in ilcls.layout:
                     raise ValueError(
-                        f"'{ilcls.__fullname__}' called with argument "
+                        f"'{self.classfullname()}' called with argument "
                         f"{name!r}, which is not part of its layout."
                     )
                 if name in getattr(ilcls, "values", {}):
                     raise ValueError(
-                        f"{name!r} is already defined for '{ilcls.__fullname__}' "
+                        f"{name!r} is already defined for '{self.classfullname()}' "
                         f"and cannot be overridden."
                     )
 
@@ -242,7 +232,7 @@ class ISA:
             for name in combined:
                 if name not in self.ilcls.layout:
                     raise ValueError(
-                        f"'{self.ilcls.__fullname__}' called with argument "
+                        f"'{self.classfullname()}' called with argument "
                         f"{name!r}, which is not part of its IL's layout."
                     )
                 if name in kwargs and (
@@ -251,7 +241,7 @@ class ISA:
                     or name in self.kwargs
                 ):
                     raise ValueError(
-                        f"{name!r} is already defined for '{self.ilcls.__fullname__}' "
+                        f"{name!r} is already defined for '{self.classfullname()}' "
                         f"and cannot be overridden in thunk."
                     )
 
@@ -275,7 +265,7 @@ class ISA:
             return self.ilcls.shape.const(args).as_value().value
 
         def clone(self):
-            clone = ISA.IThunk(self.ilcls, self.kwargs.copy())
+            clone = type(self)(**self.kwargs.copy())
             clone.xfrms = self.xfrms.copy()
             clone.asm_args = self.asm_args.copy()
             return clone
