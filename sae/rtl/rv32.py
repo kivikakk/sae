@@ -1,10 +1,4 @@
-import re
-from enum import Enum as PyEnum
-from functools import partial
-
-from amaranth import C, unsigned
-from amaranth.lib.data import Struct
-from amaranth.lib.enum import IntEnum
+from amaranth import C
 
 from .isa_rv32 import RV32I
 
@@ -14,7 +8,7 @@ __all__ = [
 
 
 def decode(struct, value):
-    view = struct(C(value, 32))
+    view = struct.shape(C(value, 32))
     result = {}
 
     for field in struct.shape.members:

@@ -79,9 +79,6 @@ class ISA:
 
                     return ISA.IThunk(cls, kwargs)
 
-                case [sig]:
-                    return cls.shape(sig)
-
                 case _:
                     assert False
 

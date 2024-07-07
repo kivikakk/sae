@@ -185,12 +185,12 @@ class Hart(Elaboratable):
             with m.State("fetch.resolve"):
                 insn = self.insn
 
-                v_i = RV32I.I(insn)
-                v_u = RV32I.U(insn)
-                v_r = RV32I.R(insn)
-                v_j = RV32I.J(insn)
-                v_b = RV32I.B(insn)
-                v_s = RV32I.S(insn)
+                v_i = RV32I.I.shape(insn)
+                v_u = RV32I.U.shape(insn)
+                v_r = RV32I.R.shape(insn)
+                v_j = RV32I.J.shape(insn)
+                v_b = RV32I.B.shape(insn)
+                v_s = RV32I.S.shape(insn)
 
                 # set pc/next before processing opcode so they can be
                 # overridden, set x0 after so it remains zero (lol).
