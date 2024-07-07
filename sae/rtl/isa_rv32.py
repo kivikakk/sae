@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from .isa import ISA, insn
+from .isa import ISA
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -235,19 +235,19 @@ class RV32I(ISA):
     ECALL = _system(funct=I.SFunct.ECALL)
     EBREAK = _system(funct=I.SFunct.EBREAK)
 
-    @insn
-    def LI(isa, *, rd, imm):
+    @ISA.insn
+    def LI(cls, *, rd, imm):
         if (imm & 0xFFF) == imm:
-            return isa.ADDI.value(rd=rd, rs1="x0", imm=imm)
+            return cls.ADDI.value(rd=rd, rs1="x0", imm=imm)
         if imm & 0x800:
             return [
-                isa.LUI.value(rd=rd, imm=imm >> 12),
-                isa.ADDI.value(rd=rd, rs1=rd, imm=(imm & 0xFFF) >> 1),
-                isa.ADDI.value(rd=rd, rs1=rd, imm=((imm & 0xFFF) >> 1) + int(imm & 1)),
+                cls.LUI.value(rd=rd, imm=imm >> 12),
+                cls.ADDI.value(rd=rd, rs1=rd, imm=(imm & 0xFFF) >> 1),
+                cls.ADDI.value(rd=rd, rs1=rd, imm=((imm & 0xFFF) >> 1) + int(imm & 1)),
             ]
         return [
-            isa.LUI.value(rd=rd, imm=imm >> 12),
-            isa.ADDI.value(rd=rd, rs1=rd, imm=imm & 0xFFF),
+            cls.LUI.value(rd=rd, imm=imm >> 12),
+            cls.ADDI.value(rd=rd, rs1=rd, imm=imm & 0xFFF),
         ]
 
     MV = ADDI(imm=0)

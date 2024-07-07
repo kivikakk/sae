@@ -296,19 +296,19 @@ class ISA:
             return clone
 
 
-def insn(inner):
-    class InsnHelper:
-        def __init__(self):
-            self._needs_finalise = True
+    def insn(inner):
+        class InsnHelper:
+            def __init__(self):
+                self._needs_finalise = True
 
-        def finalise(self, isa):
-            self.isa = isa
-            parameters = inspect.signature(inner).parameters
-            # Don't take cls along for the ride.
-            self.asm_args = [p.name for p in parameters.values() if p.kind == p.KEYWORD_ONLY]
+            def finalise(self, isa):
+                self.isa = isa
+                parameters = inspect.signature(inner).parameters
+                # Don't take cls along for the ride.
+                self.asm_args = [p.name for p in parameters.values() if p.kind == p.KEYWORD_ONLY]
 
-        @wraps(inner)
-        def value(self, **kwargs):
-            return inner(self.isa, **kwargs)
+            @wraps(inner)
+            def value(self, **kwargs):
+                return inner(self.isa, **kwargs)
 
-    return InsnHelper()
+        return InsnHelper()
