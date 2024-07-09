@@ -74,6 +74,7 @@ class ISA:
 
         return Register
 
+    @staticmethod
     def insn(inner):
         class InsnHelper:
             def __init__(self):
