@@ -258,8 +258,8 @@ class RV32I(ISA):
             # We permit failure as FENCE_TSO will leave no kwargs.
             return kwargs
         return kwargs | {
-            "succ": RV32I.fence_arg_reverse(imm & 0x0f),
             "pred": RV32I.fence_arg_reverse((imm & 0xf0) >> 4),
+            "succ": RV32I.fence_arg_reverse(imm & 0x0f),
             "fm": imm >> 8,
         }
 

@@ -51,9 +51,20 @@ def arg_fence(v):
 
 
 def disasm(op: int) -> str:
-    # for insn in RV32I.insns:
-    #     if insn.match_value(op):
-    #         assert False, f"matchy! {op} <-> {insn}"
+    best = None
+    for insn in RV32I.insns:
+        if kwargs := insn.match_value(op):
+            if best is None:
+                best = [insn, kwargs]
+            elif len(kwargs) < len(best[1]):
+                best = [insn, kwargs]
+
+    if best is not None:
+        n = insn.__name__.lower()
+        n = n.rstrip("_")
+        n = n.replace("_", ".")
+        res = f"{n} "
+        assert False, f"{res} // matchy! {op} <-> {insn} ({kwargs!r})"
     # assert False, "no match"
     # return None
     v_i = decode(RV32I.I, op)
