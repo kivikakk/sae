@@ -77,3 +77,43 @@ def test_match_simple():
     v = RV32I.SLTU.value(**kwargs)
     assert RV32I.SLTU.match_value(v) == kwargs
     assert RV32I.SNEZ.match_value(v) == kwargs_without_rs1
+
+    # NOP is ADDI(rd="zero", rs1="zero", imm=0).
+    kwargs = {"rd": RV32I.Reg("zero"), "rs1": RV32I.Reg("zero"), "imm": 0}
+    v = RV32I.NOP.value()
+    assert RV32I.ADDI.match_value(v) == kwargs
+    assert RV32I.NOP.match_value(v) == {}
+
+
+def test_match_imm_xfrm():
+    kwargs = {"rs1": RV32I.Reg("a0"), "rs2": RV32I.Reg("a1"), "imm": 8}
+    v = RV32I.BEQ.value(**kwargs)
+    assert RV32I.BEQ.match_value(v) == kwargs
+    assert RV32I.BNE.match_value(v) is None
+
+
+def test_match_shamt_xfrm():
+    kwargs = {"rd": RV32I.Reg("x2"), "rs1": RV32I.Reg("x1"), "shamt": 3}
+    v = RV32I.SLLI.value(**kwargs)
+    assert RV32I.SLLI.match_value(v) == kwargs
+    assert RV32I.SRLI.match_value(v) is None
+    assert RV32I.SRAI.match_value(v) is None
+
+
+def test_match_rs1off_xfrm():
+    kwargs = {"rd": RV32I.Reg("a5"), "rs1off": (1, RV32I.Reg("x1"))}
+    v = RV32I.LHU.value(**kwargs)
+    assert RV32I.LHU.match_value(v) == kwargs
+    assert RV32I.LH.match_value(v) is None
+    assert RV32I.LBU.match_value(v) is None
+
+
+def test_match_fence_xfrm():
+    kwargs = {"pred": "rw", "succ": "io"}
+    v = RV32I.FENCE.value(**kwargs)
+    assert RV32I.FENCE.match_value(v) == kwargs | {"fm": 0}
+    assert RV32I.FENCE_TSO.match_value(v) is None
+
+    v = RV32I.FENCE_TSO.value()
+    assert RV32I.FENCE.match_value(v) == {"pred": "rw", "succ": "rw", "fm": 0b1000}
+    assert RV32I.FENCE_TSO.match_value(v) == {}

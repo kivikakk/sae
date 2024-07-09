@@ -97,6 +97,19 @@ class RV32I(ISA):
                 if _immsingle.match(n) or _immmulti.match(n):
                         rets.append(n)
 
+            def reverse(**kwargs):
+                imm = 0
+                for n, v in {**kwargs}.items():
+                    if m := _immsingle.match(n):
+                        imm += v << int(m[1])
+                        kwargs.pop(n)
+                    elif m := _immmulti.match(n):
+                        imm += v << int(m[2])
+                        kwargs.pop(n)
+                kwargs["imm"] = imm
+                return kwargs
+
+            imm_xfrm.reverse = reverse
             imm_xfrm.return_annotation = tuple(rets)
             cls.imm_xfrm = imm_xfrm
 
@@ -158,10 +171,16 @@ class RV32I(ISA):
             ECALL = 0b000000000000000
             EBREAK = 0b000000000001000
 
-        @staticmethod
         def shamt_xfrm(shamt, *, imm11_5=0) -> ("imm",):
             assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
             return {"imm": (imm11_5 << 5) | shamt}
+
+        def shamt_xfrm_reverse(**kwargs):
+            kwargs["shamt"] = kwargs.pop("imm")
+            return kwargs
+
+        shamt_xfrm.reverse = shamt_xfrm_reverse
+
 
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
@@ -177,7 +196,6 @@ class RV32I(ISA):
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR(rd="zero", rs1="ra", imm=0)
 
-    @staticmethod
     def rs1off_xfrm(rs1off) -> ("imm", "rs1"):
         """
         Transforms "rs1off" into "imm" and "rs1".
@@ -199,6 +217,12 @@ class RV32I(ISA):
             case _:
                 assert False, f"unknown rs1off {rs1off!r}"
 
+    def rs1off_xfrm_reverse(**kwargs):
+        kwargs["rs1off"] = (kwargs.pop("imm"), kwargs.pop("rs1"))
+        return kwargs
+
+    rs1off_xfrm.reverse = rs1off_xfrm_reverse
+
     _load = I(opcode="LOAD").xfrm(rs1off_xfrm)
     LB = _load(funct3=I.LFunct.LB)
     LH = _load(funct3=I.LFunct.LH)
@@ -217,8 +241,25 @@ class RV32I(ISA):
             | (0b1000 if "i" in a else 0))
 
     @staticmethod
+    def fence_arg_reverse(a):
+        r = ""
+        if a & 0b0010: r += "r"
+        if a & 0b0001: r += "w"
+        if a & 0b1000: r += "i"
+        if a & 0b0100: r += "o"
+        return r
+
     def fence_xfrm(pred, succ, *, fm=0) -> ("imm",):
         return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
+
+    def fence_xfrm_reverse(**kwargs):
+        imm = kwargs.pop("imm")
+        kwargs["succ"] = RV32I.fence_arg_reverse(imm & 0x0f)
+        kwargs["pred"] = RV32I.fence_arg_reverse((imm & 0xf0) >> 4)
+        kwargs["fm"] = imm >> 8
+        return kwargs
+
+    fence_xfrm.reverse = fence_xfrm_reverse
 
     FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
     FENCE_TSO = FENCE(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"

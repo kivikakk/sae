@@ -172,6 +172,28 @@ class ILayout:
 
         return self.shape.const(args).as_value().value
 
+    def match_value(self, inp):
+        known = {
+            **self.defaults,
+            **self.resolve_values(self.kwargs),
+        }
+
+        rem = list(self.layout)
+        for elem, value in known.items():
+            start, end = self.field_ranges[elem]
+            matching = (inp >> start) & (2 ** (end - start) - 1)
+            if matching != value:
+                return None
+            rem.remove(elem)
+
+        kwargs = {}
+        for elem in rem:
+            start, end = self.field_ranges[elem]
+            matching = (inp >> start) & (2 ** (end - start) - 1)
+            kwargs[elem] = matching
+
+        return reduce(lambda kwargs, xfn: xfn.reverse(**kwargs), self.xfrms, kwargs)
+
     def args_for(self, **kwargs):
         combined = reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, self.kwargs | kwargs)
         for name in combined:
@@ -232,23 +254,8 @@ class ILayout:
             kwargs.update(xfn(**{**kwarg_overrides, **args}))
             return kwargs
 
+        pipe.reverse = getattr(xfn, "reverse", None)
+
         clone.xfrms.insert(0, pipe)
 
         return clone
-
-    def match_value(self, inp):
-        rem = list(self.layout)
-        for elem, value in self.args_for().items():
-            start, end = self.field_ranges[elem]
-            matching = (inp >> start) & (2 ** (end - start) - 1)
-            if matching != value:
-                return None
-            rem.remove(elem)
-
-        kwargs = {}
-        for elem in rem:
-            start, end = self.field_ranges[elem]
-            matching = (inp >> start) & (2 ** (end - start) - 1)
-            kwargs[elem] = matching
-
-        return kwargs
