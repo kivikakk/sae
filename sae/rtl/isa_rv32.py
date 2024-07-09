@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from ..isa import ISA, ILayout, RegisterSpecifier, fn_insn
+from ..isa import ISA, ILayout, RegisterSpecifier, fn_insn, xfrm
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -81,7 +81,13 @@ class RV32I(ISA):
         def __init_subclass__(cls):
             super().__init_subclass__()
 
-            def imm_xfrm(imm): # -> ("immX", "immY_X", ...)
+            rets = []
+            for n in cls.layout:
+                if _immsingle.match(n) or _immmulti.match(n):
+                        rets.append(n)
+
+            @xfrm(return_annotation=rets)
+            def imm_xfrm(imm):
                 kwargs = {}
                 for n in cls.layout:
                     if m := _immsingle.match(n):
@@ -92,12 +98,8 @@ class RV32I(ISA):
                         kwargs[n] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
                 return kwargs
 
-            rets = []
-            for n in cls.layout:
-                if _immsingle.match(n) or _immmulti.match(n):
-                        rets.append(n)
-
-            def reverse(**kwargs):
+            @imm_xfrm.reverse_fn
+            def imm_xfrm_reverse(**kwargs):
                 imm = 0
                 for n, v in {**kwargs}.items():
                     if m := _immsingle.match(n):
@@ -109,8 +111,6 @@ class RV32I(ISA):
                 kwargs["imm"] = imm
                 return kwargs
 
-            imm_xfrm.reverse = reverse
-            imm_xfrm.return_annotation = tuple(rets)
             cls.imm_xfrm = imm_xfrm
 
     class R(IL):
@@ -171,16 +171,15 @@ class RV32I(ISA):
             ECALL = 0b000000000000000
             EBREAK = 0b000000000001000
 
+        @xfrm
         def shamt_xfrm(shamt, *, imm11_5=0) -> ("imm",):
             assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
             return {"imm": (imm11_5 << 5) | shamt}
 
+        @shamt_xfrm.reverse_fn
         def shamt_xfrm_reverse(**kwargs):
             kwargs["shamt"] = kwargs.pop("imm")
             return kwargs
-
-        shamt_xfrm.reverse = shamt_xfrm_reverse
-
 
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
@@ -196,6 +195,7 @@ class RV32I(ISA):
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR(rd="zero", rs1="ra", imm=0)
 
+    @xfrm
     def rs1off_xfrm(rs1off) -> ("imm", "rs1"):
         """
         Transforms "rs1off" into "imm" and "rs1".
@@ -217,11 +217,10 @@ class RV32I(ISA):
             case _:
                 assert False, f"unknown rs1off {rs1off!r}"
 
+    @rs1off_xfrm.reverse_fn
     def rs1off_xfrm_reverse(**kwargs):
         kwargs["rs1off"] = (kwargs.pop("imm"), kwargs.pop("rs1"))
         return kwargs
-
-    rs1off_xfrm.reverse = rs1off_xfrm_reverse
 
     _load = I(opcode="LOAD").xfrm(rs1off_xfrm)
     LB = _load(funct3=I.LFunct.LB)
@@ -249,9 +248,11 @@ class RV32I(ISA):
         if a & 0b0100: r += "o"
         return r
 
+    @xfrm
     def fence_xfrm(pred, succ, *, fm=0) -> ("imm",):
         return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
 
+    @fence_xfrm.reverse_fn
     def fence_xfrm_reverse(**kwargs):
         try:
             imm = kwargs.pop("imm")
@@ -262,12 +263,10 @@ class RV32I(ISA):
         kwargs["fm"] = imm >> 8
         return kwargs
 
-    fence_xfrm.reverse = fence_xfrm_reverse
-
     FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
     FENCE_TSO = FENCE(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
 
-    @staticmethod
+    @xfrm
     def system_xfrm(funct) -> ("funct3", "imm"):
         return {"funct3": funct & 0x7, "imm": funct >> 3}
 
@@ -340,7 +339,7 @@ class RV32I(ISA):
     class U(IL):
         layout = ("opcode", "rd", "imm")
 
-        @staticmethod
+        @xfrm
         def check_xfrm(imm) -> ("imm",):
             if imm > 0:
                 assert 0 < imm <= 2**20 - 1, f"imm is {imm}"

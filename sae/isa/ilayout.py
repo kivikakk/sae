@@ -4,7 +4,7 @@ from functools import reduce, wraps
 from amaranth import Shape
 from amaranth.lib.data import StructLayout
 
-__all__ = ["ILayout"]
+__all__ = ["ILayout", "xfrm"]
 
 
 class ILayout:
@@ -189,7 +189,7 @@ class ILayout:
             matching = (inp >> start) & (2 ** (end - start) - 1)
             kwargs[elem] = matching
 
-        return reduce(lambda kwargs, xfn: xfn.reverse(**kwargs), self.xfrms, kwargs)
+        return reduce(lambda kwargs, xfn: xfn.reverse(kwargs), self.xfrms, kwargs)
 
     def args_for(self, **kwargs):
         combined = reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, self.kwargs | kwargs)
@@ -254,8 +254,32 @@ class ILayout:
             kwargs.update(xfn(**{**kwarg_overrides, **args}))
             return kwargs
 
-        pipe.reverse = getattr(xfn, "reverse", None)
+        def pipe_reverse(kwargs):
+            if rev := getattr(xfn, "reverse", None):
+                return rev(**kwargs)
+            return kwargs
+
+        pipe.reverse = pipe_reverse
 
         clone.xfrms.insert(0, pipe)
 
         return clone
+
+
+def xfrm(return_annotation=None):
+    # HACK: allow @xfrm as shorthand for @xfrm().
+    if inspect.isfunction(return_annotation):
+        return xfrm()(return_annotation)
+
+    def wrapper(inner):
+        if return_annotation is not None:
+            inner.return_annotation = tuple(return_annotation)
+
+        def reverse_fn(reverse):
+            inner.reverse = reverse
+
+        inner.reverse_fn = reverse_fn
+
+        return inner
+
+    return wrapper

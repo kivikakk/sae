@@ -117,3 +117,16 @@ def test_match_fence_xfrm():
     v = RV32I.FENCE_TSO.value()
     assert RV32I.FENCE.match_value(v) == {"pred": "rw", "succ": "rw", "fm": 0b1000}
     assert RV32I.FENCE_TSO.match_value(v) == {}
+
+
+def test_match_system_xfrm():
+    v = RV32I.ECALL.value()
+    assert RV32I.ECALL.match_value(v) == {}
+    assert RV32I.EBREAK.match_value(v) is None
+
+
+def test_match_check_xfrm():
+    kwargs = {"rd": RV32I.Reg("t2"), "imm": 123456}
+    v = RV32I.LUI.value(**kwargs)
+    assert RV32I.LUI.match_value(v) == kwargs
+    assert RV32I.AUIPC.match_value(v) is None
