@@ -265,11 +265,11 @@ class ILayout:
 
             clone.xfrms.insert(0, pipe)
         elif issubclass(xfn, ITransform):
-            xfrm = xfn(self)
+            xfrm = xfn(self, **kwarg_overrides)
             for name in xfrm.inputs:
                 clone.valid_args.append(name)
                 clone.asm_args.append(name)
-            for name in xfrm.values:
+            for name in xfrm.layout:
                 clone.valid_args.remove(name)
                 clone.asm_args.remove(name)
             def pipe(kwargs):
@@ -277,10 +277,10 @@ class ILayout:
                     args = {k: kwargs.pop(k) for k in xfrm.inputs}
                 except KeyError:
                     return kwargs
-                return {**kwargs, **xfrm.inputs_to_values(**args)}
+                return {**kwargs, **xfrm.inputs_to_layout(**args)}
             def reverse(kwargs):
-                args = {k: kwargs.pop(k) for k in xfrm.values}
-                return {**kwargs, **xfrm.values_to_inputs(**args)}
+                args = {k: kwargs.pop(k) for k in xfrm.layout}
+                return {**kwargs, **xfrm.layout_to_inputs(**args)}
             pipe.reverse = reverse
             clone.xfrms.insert(0, pipe)
         else:
@@ -292,18 +292,20 @@ class ILayout:
 class ITransform:
     ilcls: type[ILayout]
     inputs: list[str]
-    values: list[str]
+    layout: list[str]
 
-    def __init__(self, ilcls: type[ILayout], *, inputs: list[str], values: list[str]):
+    def __init__(self, ilcls: type[ILayout], *, inputs: list[str], layout: list[str]):
         self.ilcls = ilcls
         self.inputs = inputs
-        self.values = values
+        self.layout = layout
 
-    def inputs_to_values(self, **kwargs):
-        ...
+    def inputs_to_layout(self, **kwargs):
+        "Takes each of `inputs` (only) as kwargs, returns a dict containing each of `layout`."
+        raise NotImplementedError
 
-    def values_to_inputs(self, **kwargs):
-        ...
+    def layout_to_inputs(self, **kwargs):
+        "Reverses `inputs_to_layout`."
+        raise NotImplementedError
 
 
 def xfrm(return_annotation=None):

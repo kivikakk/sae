@@ -57,26 +57,26 @@ class RV32I(ISA):
             self._singles = {}
             self._ranges = {}
 
-            values = []
+            layout = []
             for n in ilcls.layout:
                 if m := _immsingle.match(n):
-                    values.append(n)
+                    layout.append(n)
                     self._singles[n] = int(m[1])
                 elif m := _immmulti.match(n):
-                    values.append(n)
+                    layout.append(n)
                     self._ranges[n] = (int(m[1]), int(m[2]))
 
-            super().__init__(ilcls, inputs=["imm"], values=values)
+            super().__init__(ilcls, inputs=["imm"], layout=layout)
 
-        def inputs_to_values(self, *, imm):
-            values = {}
+        def inputs_to_layout(self, *, imm):
+            layout = {}
             for elem, off in self._singles.items():
-                values[elem] = (imm >> off) & 1
+                layout[elem] = (imm >> off) & 1
             for elem, (top, bottom) in self._ranges.items():
-                values[elem] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
-            return values
+                layout[elem] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
+            return layout
 
-        def values_to_inputs(self, **kwargs):
+        def layout_to_inputs(self, **kwargs):
             imm = 0
             for elem, off in self._singles.items():
                 imm += kwargs[elem] << off
@@ -171,14 +171,17 @@ class RV32I(ISA):
             ECALL = 0b000000000000000
             EBREAK = 0b000000000001000
 
-        @xfrm
-        def shamt_xfrm(shamt, *, imm11_5=0) -> ("imm",):
-            assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
-            return {"imm": (imm11_5 << 5) | shamt}
+    class ShamtXfrm(ITransform):
+        def __init__(self, ilcls, *, imm11_5=0):
+            super().__init__(ilcls, inputs=["shamt"], layout=["imm"])
+            self.imm11_5 = imm11_5
 
-        @shamt_xfrm.reverse_fn
-        def shamt_xfrm_reverse(imm, **kwargs):
-            return kwargs | {"shamt": imm}
+        def inputs_to_layout(self, *, shamt):
+            assert 0 <= shamt < 2**5, f"shamt is {shamt!r}"
+            return {"imm": (self.imm11_5 << 5) | shamt}
+
+        def layout_to_inputs(self, *, imm):
+            return {"shamt": imm}
 
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
@@ -187,9 +190,9 @@ class RV32I(ISA):
     ORI = I(funct3=I.IFunct.ORI)
     ANDI = I(funct3=I.IFunct.ANDI)
 
-    SLLI = I(funct3=I.IFunct.SLLI).xfrm(I.shamt_xfrm)
-    SRLI = I(funct3=I.IFunct.SRI).xfrm(I.shamt_xfrm)
-    SRAI = I(funct3=I.IFunct.SRI).xfrm(I.shamt_xfrm, imm11_5=0b0100000)
+    SLLI = I(funct3=I.IFunct.SLLI).xfrm(ShamtXfrm)
+    SRLI = I(funct3=I.IFunct.SRI).xfrm(ShamtXfrm)
+    SRAI = I(funct3=I.IFunct.SRI).xfrm(ShamtXfrm, imm11_5=0b0100000)
 
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR(rd="zero", rs1="ra", imm=0)
