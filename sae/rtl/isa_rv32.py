@@ -253,7 +253,10 @@ class RV32I(ISA):
         return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
 
     def fence_xfrm_reverse(**kwargs):
-        imm = kwargs.pop("imm")
+        try:
+            imm = kwargs.pop("imm")
+        except KeyError:
+            return kwargs
         kwargs["succ"] = RV32I.fence_arg_reverse(imm & 0x0f)
         kwargs["pred"] = RV32I.fence_arg_reverse((imm & 0xf0) >> 4)
         kwargs["fm"] = imm >> 8

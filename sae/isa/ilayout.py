@@ -173,10 +173,7 @@ class ILayout:
         return self.shape.const(args).as_value().value
 
     def match_value(self, inp):
-        known = {
-            **self.defaults,
-            **self.resolve_values(self.kwargs),
-        }
+        known = self.args_for()
 
         rem = list(self.layout)
         for elem, value in known.items():
@@ -245,7 +242,10 @@ class ILayout:
             args = {}
             for name, p in parameters.items():
                 if p.default is p.empty:
-                    args[name] = kwargs.pop(name)
+                    try:
+                        args[name] = kwargs.pop(name)
+                    except KeyError:
+                        return kwargs
                 else:
                     # Default value (in function signature) may be overridden
                     # by kwarg_overrides.
