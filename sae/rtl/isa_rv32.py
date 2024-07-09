@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from ..isa import ISA, ILayout, RegisterSpecifier, fn_insn, xfrm
+from ..isa import ISA, ILayout, ITransform, RegisterSpecifier, fn_insn, xfrm
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -51,6 +51,40 @@ class RV32I(ISA):
          ("s10", "x26"), ("s11", "x27"),
          ("t3", "x28"), ("t4", "x29"), ("t5", "x30"), ("t6", "x31")])
 
+
+    class ImmXfrm(ITransform):
+        def __init__(self, ilcls):
+            self._singles = {}
+            self._ranges = {}
+
+            values = []
+            for n in ilcls.layout:
+                if m := _immsingle.match(n):
+                    values.append(n)
+                    self._singles[n] = int(m[1])
+                elif m := _immmulti.match(n):
+                    values.append(n)
+                    self._ranges[n] = (int(m[1]), int(m[2]))
+
+            super().__init__(ilcls, inputs=["imm"], values=values)
+
+        def inputs_to_values(self, *, imm):
+            values = {}
+            for elem, off in self._singles.items():
+                values[elem] = (imm >> off) & 1
+            for elem, (top, bottom) in self._ranges.items():
+                values[elem] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
+            return values
+
+        def values_to_inputs(self, **kwargs):
+            imm = 0
+            for elem, off in self._singles.items():
+                imm += kwargs[elem] << off
+            for elem, (_top, bottom) in self._ranges.items():
+                imm += kwargs[elem] << bottom
+            return {"imm": imm}
+
+
     class IL(ILayout, len=32):
         opcode: Opcode
         rd: Reg
@@ -78,40 +112,6 @@ class RV32I(ISA):
                 return unsigned(1)
             assert False, f"unhandled: {name!r}"
 
-        def __init_subclass__(cls):
-            super().__init_subclass__()
-
-            rets = []
-            for n in cls.layout:
-                if _immsingle.match(n) or _immmulti.match(n):
-                        rets.append(n)
-
-            @xfrm(return_annotation=rets)
-            def imm_xfrm(imm):
-                kwargs = {}
-                for n in cls.layout:
-                    if m := _immsingle.match(n):
-                        kwargs[n] = (imm >> int(m[1])) & 1
-                    elif m := _immmulti.match(n):
-                        top = int(m[1])
-                        bottom = int(m[2])
-                        kwargs[n] = (imm >> bottom) & (2 ** (top - bottom + 1) - 1)
-                return kwargs
-
-            @imm_xfrm.reverse_fn
-            def imm_xfrm_reverse(**kwargs):
-                imm = 0
-                for n, v in {**kwargs}.items():
-                    if m := _immsingle.match(n):
-                        imm += v << int(m[1])
-                        kwargs.pop(n)
-                    elif m := _immmulti.match(n):
-                        imm += v << int(m[2])
-                        kwargs.pop(n)
-                kwargs["imm"] = imm
-                return kwargs
-
-            cls.imm_xfrm = imm_xfrm
 
     class R(IL):
         layout = ("opcode", "rd", "funct3", "rs1", "rs2", "funct7")
@@ -303,7 +303,7 @@ class RV32I(ISA):
             SH = 0b001
             SW = 0b010
 
-    _store = S().xfrm(S.imm_xfrm).xfrm(rs1off_xfrm)
+    _store = S().xfrm(ImmXfrm).xfrm(rs1off_xfrm)
     SB = _store(funct3=S.Funct.SB)
     SH = _store(funct3=S.Funct.SH)
     SW = _store(funct3=S.Funct.SW)
@@ -328,7 +328,7 @@ class RV32I(ISA):
             BLTU = 0b110
             BGEU = 0b111
 
-    _branch = B().xfrm(B.imm_xfrm)
+    _branch = B().xfrm(ImmXfrm)
     BEQ = _branch(funct3=B.Funct.BEQ)
     BNE = _branch(funct3=B.Funct.BNE)
     BLT = _branch(funct3=B.Funct.BLT)
@@ -355,7 +355,7 @@ class RV32I(ISA):
         layout = ("opcode", "rd", "imm19_12", "imm11", "imm10_1", "imm20")
         defaults = {"opcode": "JAL"}
 
-    JAL = J().xfrm(J.imm_xfrm)
+    JAL = J().xfrm(ImmXfrm)
     J_ = JAL(rd="zero")
 
 

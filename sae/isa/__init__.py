@@ -3,9 +3,9 @@ from functools import wraps
 
 from amaranth.lib.enum import IntEnum, nonmember
 
-from .ilayout import ILayout, xfrm
+from .ilayout import ILayout, ITransform, xfrm
 
-__all__ = ["ISA", "fn_insn", "RegisterSpecifier", "ILayout", "xfrm"]
+__all__ = ["ISA", "fn_insn", "RegisterSpecifier", "ILayout", "ITransform", "xfrm"]
 
 
 class ISA:

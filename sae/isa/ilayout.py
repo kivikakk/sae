@@ -220,50 +220,90 @@ class ILayout:
 
     def xfrm(self, xfn, **kwarg_overrides):
         clone = self.clone()
-        xfn_sig = inspect.signature(xfn, eval_str=True)
-        # Return annotations can be generated programmatically (see imm_xfrm).
-        return_annotation = getattr(xfn, "return_annotation", xfn_sig.return_annotation)
-        parameters = xfn_sig.parameters
 
-        # All parameters become valid __call__ args. Required parameters become value() args.
-        for name, p in parameters.items():
-            clone.valid_args.append(name)
-            if p.default is xfn_sig.empty:
-                clone.asm_args.append(name)
+        if inspect.isfunction(xfn):
+            xfn_sig = inspect.signature(xfn, eval_str=True)
+            # Return annotations can be generated programmatically (see imm_xfrm).
+            return_annotation = getattr(xfn, "return_annotation", xfn_sig.return_annotation)
+            parameters = xfn_sig.parameters
 
-        # Outputs named in the annotation are no longer inputs.
-        assert return_annotation is not xfn_sig.empty, f"no return annotation on {xfn}"
-        for name in return_annotation:
-            clone.valid_args.remove(name)
-            clone.asm_args.remove(name)
-
-        @wraps(xfn)
-        def pipe(kwargs):
-            args = {}
+            # All parameters become valid __call__ args. Required parameters become value() args.
             for name, p in parameters.items():
-                if p.default is p.empty:
-                    try:
-                        args[name] = kwargs.pop(name)
-                    except KeyError:
-                        return kwargs
-                else:
-                    # Default value (in function signature) may be overridden
-                    # by kwarg_overrides.
-                    args[name] = kwargs.pop(
-                        name, kwarg_overrides.get(name, p.default))
-            kwargs.update(xfn(**{**kwarg_overrides, **args}))
-            return kwargs
+                clone.valid_args.append(name)
+                if p.default is xfn_sig.empty:
+                    clone.asm_args.append(name)
 
-        def pipe_reverse(kwargs):
-            if rev := getattr(xfn, "reverse", None):
-                return rev(**kwargs)
-            return kwargs
+            # Outputs named in the annotation are no longer inputs.
+            assert return_annotation is not xfn_sig.empty, f"no return annotation on {xfn}"
+            for name in return_annotation:
+                clone.valid_args.remove(name)
+                clone.asm_args.remove(name)
 
-        pipe.reverse = pipe_reverse
+            @wraps(xfn)
+            def pipe(kwargs):
+                args = {}
+                for name, p in parameters.items():
+                    if p.default is p.empty:
+                        try:
+                            args[name] = kwargs.pop(name)
+                        except KeyError:
+                            return kwargs
+                    else:
+                        # Default value (in function signature) may be overridden
+                        # by kwarg_overrides.
+                        args[name] = kwargs.pop(
+                            name, kwarg_overrides.get(name, p.default))
+                kwargs.update(xfn(**{**kwarg_overrides, **args}))
+                return kwargs
 
-        clone.xfrms.insert(0, pipe)
+            def pipe_reverse(kwargs):
+                if rev := getattr(xfn, "reverse", None):
+                    return rev(**kwargs)
+                return kwargs
+
+            pipe.reverse = pipe_reverse
+
+            clone.xfrms.insert(0, pipe)
+        elif issubclass(xfn, ITransform):
+            xfrm = xfn(self)
+            for name in xfrm.inputs:
+                clone.valid_args.append(name)
+                clone.asm_args.append(name)
+            for name in xfrm.values:
+                clone.valid_args.remove(name)
+                clone.asm_args.remove(name)
+            def pipe(kwargs):
+                try:
+                    args = {k: kwargs.pop(k) for k in xfrm.inputs}
+                except KeyError:
+                    return kwargs
+                return {**kwargs, **xfrm.inputs_to_values(**args)}
+            def reverse(kwargs):
+                args = {k: kwargs.pop(k) for k in xfrm.values}
+                return {**kwargs, **xfrm.values_to_inputs(**args)}
+            pipe.reverse = reverse
+            clone.xfrms.insert(0, pipe)
+        else:
+            assert False, xfn
 
         return clone
+
+
+class ITransform:
+    ilcls: type[ILayout]
+    inputs: list[str]
+    values: list[str]
+
+    def __init__(self, ilcls: type[ILayout], *, inputs: list[str], values: list[str]):
+        self.ilcls = ilcls
+        self.inputs = inputs
+        self.values = values
+
+    def inputs_to_values(self, **kwargs):
+        ...
+
+    def values_to_inputs(self, **kwargs):
+        ...
 
 
 def xfrm(return_annotation=None):
