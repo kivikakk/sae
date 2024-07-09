@@ -5,7 +5,7 @@ from amaranth.lib.enum import IntEnum, nonmember
 
 from .ilayout import ILayout
 
-__all__ = ["ISA", "ILayout"]
+__all__ = ["ISA", "fn_insn", "RegisterSpecifier", "ILayout"]
 
 
 class ISA:
@@ -23,71 +23,71 @@ class ISA:
                 obj.finalise(cls)
             if type(obj) is type and issubclass(obj, ILayout) and hasattr(obj, "layout"):
                 cls.layouts.append(obj)
-            if isinstance(obj, ILayout):
+            if isinstance(obj, ILayout): # XXX Insufficient — what of insn-generated??
                 cls.insns.append(obj)
         super().__init_subclass__()
 
-    @staticmethod
-    def RegisterSpecifier(size, names):
-        count = 2**size
-        if len(names) < count:
-            raise ValueError(
-                f"Register naming is inadequate (named {len(names)}/{count}).")
-        elif len(names) > count:
-            raise ValueError(
-                f"Register naming is excessive (named {len(names)}/{count}).")
 
-        members = {}
-        mappings = {}
-        aliases_ = {}
-        for i, ax in enumerate(names):
-            match ax:
-                case [primary, *rest]:
-                    members[primary.upper()] = i
-                    for a in rest:
-                        mappings[a.upper()] = primary.upper()
-                    aliases_[primary.upper()] = [n.upper() for n in ax]
-                case str():
-                    members[ax.upper()] = i
-                case _:
-                    raise TypeError(f"Unknown name specifier {ax!r}.")
+def fn_insn(inner):
+    class InsnHelper:
+        def __init__(self):
+            self._needs_finalise = True
 
-        class Register(IntEnum, shape=size):
-            locals().update(members)
+        def finalise(self, isa):
+            self.isa = isa
+            parameters = inspect.signature(inner).parameters
+            # Don't take cls along for the ride.
+            self.asm_args = [p.name for p in parameters.values() if p.kind == p.KEYWORD_ONLY]
 
-            _mappings = nonmember(mappings)
-            _aliases = nonmember(aliases_)
-            _needs_name = nonmember(True)
+        @wraps(inner)
+        def value(self, **kwargs):
+            return inner(self.isa, **kwargs)
 
-            @classmethod
-            def _missing_(cls, value):
-                value = value.upper()
-                try:
-                    return cls[cls._mappings[value]]
-                except KeyError:
-                    return cls[value]
+    return InsnHelper()
 
-            @nonmember
-            @property
-            def aliases(self):
-                return self._aliases[self._name_]
 
-        return Register
+def RegisterSpecifier(size, names):
+    count = 2**size
+    if len(names) < count:
+        raise ValueError(
+            f"Register naming is inadequate (named {len(names)}/{count}).")
+    elif len(names) > count:
+        raise ValueError(
+            f"Register naming is excessive (named {len(names)}/{count}).")
 
-    @staticmethod
-    def insn(inner):
-        class InsnHelper:
-            def __init__(self):
-                self._needs_finalise = True
+    members = {}
+    mappings = {}
+    aliases_ = {}
+    for i, ax in enumerate(names):
+        match ax:
+            case [primary, *rest]:
+                members[primary.upper()] = i
+                for a in rest:
+                    mappings[a.upper()] = primary.upper()
+                aliases_[primary.upper()] = [n.upper() for n in ax]
+            case str():
+                members[ax.upper()] = i
+            case _:
+                raise TypeError(f"Unknown name specifier {ax!r}.")
 
-            def finalise(self, isa):
-                self.isa = isa
-                parameters = inspect.signature(inner).parameters
-                # Don't take cls along for the ride.
-                self.asm_args = [p.name for p in parameters.values() if p.kind == p.KEYWORD_ONLY]
+    class Register(IntEnum, shape=size):
+        locals().update(members)
 
-            @wraps(inner)
-            def value(self, **kwargs):
-                return inner(self.isa, **kwargs)
+        _mappings = nonmember(mappings)
+        _aliases = nonmember(aliases_)
+        _needs_name = nonmember(True)
 
-        return InsnHelper()
+        @classmethod
+        def _missing_(cls, value):
+            value = value.upper()
+            try:
+                return cls[cls._mappings[value]]
+            except KeyError:
+                return cls[value]
+
+        @nonmember
+        @property
+        def aliases(self):
+            return self._aliases[self._name_]
+
+    return Register

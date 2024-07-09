@@ -51,11 +51,11 @@ def arg_fence(v):
 
 
 def disasm(op: int) -> str:
-    # for insn in RV32I.insns:
-    #     if insn.match_value(op):
-    #         assert False, f"matchy! {op} <-> {insn}"
-    # assert False, "no match"
-    # return None
+    for insn in RV32I.insns:
+        if insn.match_value(op):
+            assert False, f"matchy! {op} <-> {insn}"
+    assert False, "no match"
+    return None
     v_i = decode(RV32I.I, op)
     v_b = decode(RV32I.B, op)
     v_u = decode(RV32I.U, op)

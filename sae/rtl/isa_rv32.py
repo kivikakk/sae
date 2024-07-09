@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from ..isa import ISA, ILayout
+from ..isa import ISA, ILayout, RegisterSpecifier, fn_insn
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -38,7 +38,7 @@ class RV32I(ISA):
         JAL = 0b1101111
         SYSTEM = 0b1110011
 
-    Reg = ISA.RegisterSpecifier(
+    Reg = RegisterSpecifier(
         5,
         [("zero", "x0"),
          ("ra", "x1"), ("sp", "x2"), ("gp", "x3"), ("tp", "x4"),
@@ -231,7 +231,7 @@ class RV32I(ISA):
     ECALL = _system(funct=I.SFunct.ECALL)
     EBREAK = _system(funct=I.SFunct.EBREAK)
 
-    @ISA.insn
+    @fn_insn
     def LI(cls, *, rd, imm):
         if (imm & 0xFFF) == imm:
             return cls.ADDI.value(rd=rd, rs1="x0", imm=imm)
@@ -322,7 +322,7 @@ class RV32IC(RV32I):
         C1 = 0b01
         C2 = 0b10
 
-    Reg_ = ISA.RegisterSpecifier(
+    Reg_ = RegisterSpecifier(
         3,
         [("s0", "x8"),
          ("s1", "x9"),
