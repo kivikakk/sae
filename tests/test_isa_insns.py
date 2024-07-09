@@ -53,3 +53,27 @@ def test_call_insufficient():
                        match=r"^'sae\..*\.RV32I\.ADD' called without supplying values "
                              r"for arguments: \['rd', 'rs1', 'rs2'\]\.$"):
         RV32I.ADD.value()
+
+
+def test_match_simple():
+    # SUB only differs from ADD by funct7.
+    kwargs = {"rd": RV32I.Reg("a0"), "rs1": RV32I.Reg("a1"), "rs2": RV32I.Reg("a2")}
+    v = RV32I.ADD.value(**kwargs)
+    assert RV32I.ADD.match_value(v) == kwargs
+    assert RV32I.SUB.match_value(v) is None
+
+    v = RV32I.SUB.value(**kwargs)
+    assert RV32I.SUB.match_value(v) == kwargs
+    assert RV32I.ADD.match_value(v) is None
+
+    # SNEZ is SLTU(rs1="zero").
+    v = RV32I.SLTU.value(**kwargs)
+    assert RV32I.SLTU.match_value(v) == kwargs
+    assert RV32I.SNEZ.match_value(v) is None
+
+    kwargs["rs1"] = RV32I.Reg("zero")
+    kwargs_without_rs1 = kwargs.copy()
+    kwargs_without_rs1.pop("rs1")
+    v = RV32I.SLTU.value(**kwargs)
+    assert RV32I.SLTU.match_value(v) == kwargs
+    assert RV32I.SNEZ.match_value(v) == kwargs_without_rs1

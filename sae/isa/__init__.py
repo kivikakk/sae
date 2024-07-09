@@ -23,7 +23,7 @@ class ISA:
                 obj.finalise(cls)
             if type(obj) is type and issubclass(obj, ILayout) and hasattr(obj, "layout"):
                 cls.layouts.append(obj)
-            if isinstance(obj, ILayout): # XXX Insufficient — what of insn-generated??
+            if isinstance(obj, ILayout): # XXX Insufficient — what of fn_insn-generated?
                 cls.insns.append(obj)
         super().__init_subclass__()
 

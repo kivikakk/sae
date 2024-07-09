@@ -237,14 +237,18 @@ class ILayout:
         return clone
 
     def match_value(self, inp):
-        # Go over every element of args_for, find the index range it belongs to, etc.
-        print("inp: ", inp)
+        rem = list(self.layout)
         for elem, value in self.args_for().items():
             start, end = self.field_ranges[elem]
-            print("  ", elem, "=", value, "    at", start, "-", end)
-            x = (inp >> start) & (2 ** (end - start) - 1)
-            print("     ", x)
-            if x != value:
+            matching = (inp >> start) & (2 ** (end - start) - 1)
+            if matching != value:
                 return None
+            rem.remove(elem)
 
-        assert False, "done"
+        kwargs = {}
+        for elem in rem:
+            start, end = self.field_ranges[elem]
+            matching = (inp >> start) & (2 ** (end - start) - 1)
+            kwargs[elem] = matching
+
+        return kwargs

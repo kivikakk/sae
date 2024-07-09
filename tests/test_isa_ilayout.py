@@ -20,6 +20,7 @@ def test_base():
 
     assert RV32I.R.defaults == {"opcode": RV32I.Opcode.OP, "funct7": 0}
 
+
 def test_missing_len():
     with pytest.raises(ValueError,
                        match=r"^'tests\.test_isa_ilayout\..*\.I\.IL' missing len, "
@@ -27,6 +28,7 @@ def test_missing_len():
         class I(ISA):
             class IL(ILayout):
                 layout = (1,)
+
 
 def test_bad_tuple():
     with pytest.raises(TypeError,
@@ -36,6 +38,7 @@ def test_bad_tuple():
             class X(ILayout, len=1):
                 layout = "abc"  # i.e. ("abc") typed instead of ("abc",)
 
+
 def test_bad_field():
     with pytest.raises(TypeError,
                        match=r"^Unknown field specifier \[\] in layout of "
@@ -44,6 +47,7 @@ def test_bad_field():
             class X(ILayout, len=1):
                 layout = ([], "abc")
 
+
 def test_unregistered():
     with pytest.raises(ValueError,
                        match=r"^Field specifier 'abc' not registered, and "
@@ -51,6 +55,7 @@ def test_unregistered():
         class I(ISA):
             class X(ILayout, len=1):
                 layout = ("abc",)
+
 
 def test_inadequate():
     with pytest.raises(ValueError,
@@ -61,6 +66,7 @@ def test_inadequate():
                 sh2: 3
 
                 layout = ("sh1", "sh2")
+
 
 def test_excessive():
     with pytest.raises(ValueError,
@@ -73,6 +79,7 @@ def test_excessive():
 
                 layout = ("sh1", "sh2", "sh3")
 
+
 def test_default_missing_annotation():
     with pytest.raises(TypeError,
                        match=r"^Cannot resolve default value for element of "
@@ -83,4 +90,3 @@ def test_default_missing_annotation():
 
                 layout = ("a", ("b", 4))
                 defaults = {"b": "X"}
-
