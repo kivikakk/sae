@@ -1,6 +1,6 @@
 import pytest
 
-from sae.rtl.isa_rv32 import RV32I, RV32IC
+from sae.rtl.isa_rv32 import RV32I
 
 
 def test_base():
@@ -53,10 +53,3 @@ def test_call_insufficient():
                        match=r"^'sae\..*\.RV32I\.ADD' called without supplying values "
                              r"for arguments: \['rd', 'rs1', 'rs2'\]\.$"):
         RV32I.ADD.value()
-
-
-def test_inheritance():
-    assert RV32IC.Reg is RV32I.Reg
-    assert RV32IC.CR.shape["rs2"].shape is RV32I.Reg
-    assert RV32IC.I is RV32I.I
-    assert RV32IC.ADD is RV32I.ADD

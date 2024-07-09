@@ -2,8 +2,8 @@ import pytest
 from amaranth import Shape, unsigned
 from amaranth.lib.data import StructLayout
 
-from sae.isa import ISA, ILayout, RegisterSpecifier
-from sae.rtl.isa_rv32 import RV32I, RV32IC
+from sae.isa import ISA, ILayout
+from sae.rtl.isa_rv32 import RV32I
 
 
 def test_base():
