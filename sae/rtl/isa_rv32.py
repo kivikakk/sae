@@ -177,9 +177,8 @@ class RV32I(ISA):
             return {"imm": (imm11_5 << 5) | shamt}
 
         @shamt_xfrm.reverse_fn
-        def shamt_xfrm_reverse(**kwargs):
-            kwargs["shamt"] = kwargs.pop("imm")
-            return kwargs
+        def shamt_xfrm_reverse(imm, **kwargs):
+            return kwargs | {"shamt": imm}
 
     ADDI = I(funct3=I.IFunct.ADDI)
     SLTI = I(funct3=I.IFunct.SLTI)
@@ -218,9 +217,8 @@ class RV32I(ISA):
                 assert False, f"unknown rs1off {rs1off!r}"
 
     @rs1off_xfrm.reverse_fn
-    def rs1off_xfrm_reverse(**kwargs):
-        kwargs["rs1off"] = (kwargs.pop("imm"), kwargs.pop("rs1"))
-        return kwargs
+    def rs1off_xfrm_reverse(*, imm, rs1, **kwargs):
+        return kwargs | {"rs1off": (imm, rs1)}
 
     _load = I(opcode="LOAD").xfrm(rs1off_xfrm)
     LB = _load(funct3=I.LFunct.LB)
@@ -257,11 +255,13 @@ class RV32I(ISA):
         try:
             imm = kwargs.pop("imm")
         except KeyError:
+            # We permit failure as FENCE_TSO will leave no kwargs.
             return kwargs
-        kwargs["succ"] = RV32I.fence_arg_reverse(imm & 0x0f)
-        kwargs["pred"] = RV32I.fence_arg_reverse((imm & 0xf0) >> 4)
-        kwargs["fm"] = imm >> 8
-        return kwargs
+        return kwargs | {
+            "succ": RV32I.fence_arg_reverse(imm & 0x0f),
+            "pred": RV32I.fence_arg_reverse((imm & 0xf0) >> 4),
+            "fm": imm >> 8,
+        }
 
     FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
     FENCE_TSO = FENCE(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
