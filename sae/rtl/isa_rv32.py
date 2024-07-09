@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from .isa import ISA
+from ..isa import ISA, ILayout
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -51,7 +51,7 @@ class RV32I(ISA):
          ("s10", "x26"), ("s11", "x27"),
          ("t3", "x28"), ("t4", "x29"), ("t5", "x30"), ("t6", "x31")])
 
-    class IL(ISA.ILayout, len=32):
+    class IL(ILayout, len=32):
         opcode: Opcode
         rd: Reg
         rs1: Reg
@@ -333,7 +333,7 @@ class RV32IC(RV32I):
          ("a4", "x14"),
          ("a5", "x15")])
 
-    class IL(ISA.ILayout, len=16):
+    class IL(ILayout, len=16):
         op: Op
         rs2: Reg
         rdrs1: Reg

@@ -3,7 +3,7 @@ import unittest
 from amaranth import Shape, unsigned
 from amaranth.lib.data import StructLayout
 
-from sae.rtl.isa import ISA
+from sae.isa import ISA, ILayout
 from sae.rtl.isa_rv32 import RV32I, RV32IC
 
 
@@ -52,14 +52,14 @@ class TestISAILayout(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, r"^'tests\.test_isa\..*\.I\.IL' missing len, and no default given\.$"):
             class I(ISA):
-                class IL(ISA.ILayout):
+                class IL(ILayout):
                     layout = (1,)
 
     def test_bad_tuple(self):
         with self.assertRaisesRegex(
             TypeError, r"^Expected tuple for 'tests\.test_isa\..*\.I\.X', not str\.$"):
             class I(ISA):
-                class X(ISA.ILayout, len=1):
+                class X(ILayout, len=1):
                     layout = "abc"  # i.e. ("abc") typed instead of ("abc",)
 
     def test_bad_field(self):
@@ -67,7 +67,7 @@ class TestISAILayout(unittest.TestCase):
             TypeError,
             r"^Unknown field specifier \[\] in layout of 'tests\.test_isa\..*\.I\.X'\.$"):
             class I(ISA):
-                class X(ISA.ILayout, len=1):
+                class X(ILayout, len=1):
                     layout = ([], "abc")
 
     def test_unregistered(self):
@@ -76,14 +76,14 @@ class TestISAILayout(unittest.TestCase):
             r"^Field specifier 'abc' not registered, and "
             r"no 'resolve' implementation available\.$"):
             class I(ISA):
-                class X(ISA.ILayout, len=1):
+                class X(ILayout, len=1):
                     layout = ("abc",)
 
     def test_inadequate(self):
         with self.assertRaisesRegex(
             ValueError, r"^Layout components are inadequate \(fills 7/8\)\.$"):
             class I(ISA):
-                class X(ISA.ILayout, len=8):
+                class X(ILayout, len=8):
                     sh1: 4
                     sh2: 3
 
@@ -93,7 +93,7 @@ class TestISAILayout(unittest.TestCase):
         with self.assertRaisesRegex(
             ValueError, r"^Layout components are excessive \(fills 12/8\)\.$"):
             class I(ISA):
-                class X(ISA.ILayout, len=8):
+                class X(ILayout, len=8):
                     sh1: 4
                     sh2: 4
                     sh3: 4
@@ -106,7 +106,7 @@ class TestISAILayout(unittest.TestCase):
             r"^Cannot resolve default value for element of "
             r"'tests\.test_isa\..*\.I\.IL': 'b'='X'\.$"):
             class I(ISA):
-                class IL(ISA.ILayout, len=8):
+                class IL(ILayout, len=8):
                     a: 4
 
                     layout = ("a", ("b", 4))
