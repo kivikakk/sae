@@ -36,37 +36,8 @@ def c2foff(count, value):
         return f"0x{v:x}"
 
 
-def arg_fence(v):
-    assert not (v & ~0b1111)
-    a = []
-    if v & 0b1000:
-        a.append("i")
-    if v & 0b0100:
-        a.append("o")
-    if v & 0b0010:
-        a.append("r")
-    if v & 0b0001:
-        a.append("w")
-    return "".join(a)
-
 
 def disasm(op: int) -> str:
-    best = None
-    for insn in RV32I.insns:
-        if kwargs := insn.match_value(op):
-            if best is None:
-                best = [insn, kwargs]
-            elif len(kwargs) < len(best[1]):
-                best = [insn, kwargs]
-
-    if best is not None:
-        n = insn.__name__.lower()
-        n = n.rstrip("_")
-        n = n.replace("_", ".")
-        res = f"{n} "
-        assert False, f"{res} // matchy! {op} <-> {insn} ({kwargs!r})"
-    # assert False, "no match"
-    # return None
     v_i = decode(RV32I.I, op)
     v_b = decode(RV32I.B, op)
     v_u = decode(RV32I.U, op)
@@ -90,7 +61,7 @@ def disasm(op: int) -> str:
                     fm = v_i["imm"] >> 8
                     if fm == 0b1000 and succ == pred == 0b0011:
                         return "fence.tso"
-                    return f"fence {arg_fence(pred)}, {arg_fence(succ)}"
+                    return f"fence {RV32I.arg_fence(pred)}, {RV32I.arg_fence(succ)}"
         case RV32I.Opcode.OP_IMM:
             funct = RV32I.I.IFunct(v_i["funct3"])
             if funct == RV32I.I.IFunct.ADDI and v_i["imm"] == 0:

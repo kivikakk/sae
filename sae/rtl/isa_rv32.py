@@ -6,7 +6,7 @@ from amaranth import unsigned
 from amaranth.lib.enum import IntEnum
 
 from .. import st
-from ..isa import ISA, ILayout, ITransform, RegisterSpecifier, fn_insn, xfrm
+from ..isa import ISA, ILayout, ITransform, RegisterSpecifier, fn_insn
 
 __all__ = ["RV32I", "RV32IC"]
 
@@ -197,33 +197,28 @@ class RV32I(ISA):
     JALR = I(opcode="JALR", funct3=0)
     RET = JALR(rd="zero", rs1="ra", imm=0)
 
-    @xfrm
-    def rs1off_xfrm(rs1off) -> ("imm", "rs1"):
-        """
-        Transforms "rs1off" into "imm" and "rs1".
+    class RS1OffXfrm(ITransform):
+        def __init__(self, ilcls):
+            super().__init__(ilcls, inputs=["rs1off"], layout=["imm", "rs1"])
 
-        * Passes through an (offset, reg) pair unchanged.
-        * Parses an (offset, regstr) pair.
-        * Parses an st.Offset().
-        """
-        match rs1off:
-            case (int(), RV32I.Reg()):
-                return {"imm": rs1off[0], "rs1": rs1off[1]}
-            case (int(), str()):
-                return {"imm": rs1off[0], "rs1": RV32I.Reg(rs1off[1])}
-            case st.Offset():
-                return {
-                    "imm": rs1off.offset,
-                    "rs1": RV32I.Reg(rs1off.register.register),
-                }
-            case _:
-                assert False, f"unknown rs1off {rs1off!r}"
+        def inputs_to_layout(self, *, rs1off):
+            match rs1off:
+                case (int(), RV32I.Reg()):
+                    return {"imm": rs1off[0], "rs1": rs1off[1]}
+                case (int(), str()):
+                    return {"imm": rs1off[0], "rs1": RV32I.Reg(rs1off[1])}
+                case st.Offset():
+                    return {
+                        "imm": rs1off.offset,
+                        "rs1": RV32I.Reg(rs1off.register.register),
+                    }
+                case _:
+                    assert False, f"unknown rs1off {rs1off!r}"
 
-    @rs1off_xfrm.reverse_fn
-    def rs1off_xfrm_reverse(*, imm, rs1, **kwargs):
-        return kwargs | {"rs1off": (imm, rs1)}
+        def layout_to_inputs(self, *, imm, rs1):
+            return {"rs1off": (imm, rs1)}
 
-    _load = I(opcode="LOAD").xfrm(rs1off_xfrm)
+    _load = I(opcode="LOAD").xfrm(RS1OffXfrm)
     LB = _load(funct3=I.LFunct.LB)
     LH = _load(funct3=I.LFunct.LH)
     LW = _load(funct3=I.LFunct.LW)
@@ -241,39 +236,48 @@ class RV32I(ISA):
             | (0b1000 if "i" in a else 0))
 
     @staticmethod
-    def fence_arg_reverse(a):
-        r = ""
-        if a & 0b0010: r += "r"
-        if a & 0b0001: r += "w"
-        if a & 0b1000: r += "i"
-        if a & 0b0100: r += "o"
-        return r
+    def arg_fence(v):
+        assert not (v & ~0b1111)
+        a = []
+        if v & 0b1000:
+            a.append("i")
+        if v & 0b0100:
+            a.append("o")
+        if v & 0b0010:
+            a.append("r")
+        if v & 0b0001:
+            a.append("w")
+        return "".join(a)
 
-    @xfrm
-    def fence_xfrm(pred, succ, *, fm=0) -> ("imm",):
-        return {"imm": RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (fm << 8)}
+    class FenceXfrm(ITransform):
+        def __init__(self, ilcls, *, fm=0):
+            super().__init__(ilcls, inputs=["pred", "succ"], layout=["imm"])
+            self.fm = fm
 
-    @fence_xfrm.reverse_fn
-    def fence_xfrm_reverse(**kwargs):
-        try:
-            imm = kwargs.pop("imm")
-        except KeyError:
-            # We permit failure as FENCE_TSO will leave no kwargs.
-            return kwargs
-        return kwargs | {
-            "pred": RV32I.fence_arg_reverse((imm & 0xf0) >> 4),
-            "succ": RV32I.fence_arg_reverse(imm & 0x0f),
-            "fm": imm >> 8,
-        }
+        def inputs_to_layout(self, *, pred, succ):
+            imm = RV32I.fence_arg(succ) | (RV32I.fence_arg(pred) << 4) | (self.fm << 8)
+            return {"imm": imm}
 
-    FENCE = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0).xfrm(fence_xfrm)
-    FENCE_TSO = FENCE(pred="rw", succ="rw", fm=0b1000)  # XXX "fence.tso"
+        def layout_to_inputs(self, *, imm):
+            if imm >> 8 != self.fm:
+                return None
+            return {
+                "pred": RV32I.arg_fence((imm & 0xf0) >> 4),
+                "succ": RV32I.arg_fence(imm & 0x0f),
+            }
 
-    @xfrm
-    def system_xfrm(funct) -> ("funct3", "imm"):
-        return {"funct3": funct & 0x7, "imm": funct >> 3}
+    _fence = I(opcode="MISC_MEM", funct3=I.MMFunct.FENCE, rd=0, rs1=0)
+    FENCE = _fence.xfrm(FenceXfrm)
+    FENCE_TSO = _fence.xfrm(FenceXfrm, fm=0b1000)(pred="rw", succ="rw")
 
-    _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(system_xfrm)
+    class SystemXfrm(ITransform):
+        def __init__(self, ilcls):
+            super().__init__(ilcls, inputs=["funct"], layout=["funct3", "imm"])
+
+        def inputs_to_layout(self, *, funct):
+            return {"funct3": funct & 0x7, "imm": funct >> 3}
+
+    _system = I(opcode="SYSTEM", rd=0, rs1=0).xfrm(SystemXfrm)
     ECALL = _system(funct=I.SFunct.ECALL)
     EBREAK = _system(funct=I.SFunct.EBREAK)
 
@@ -306,7 +310,7 @@ class RV32I(ISA):
             SH = 0b001
             SW = 0b010
 
-    _store = S().xfrm(ImmXfrm).xfrm(rs1off_xfrm)
+    _store = S().xfrm(ImmXfrm).xfrm(RS1OffXfrm)
     SB = _store(funct3=S.Funct.SB)
     SH = _store(funct3=S.Funct.SH)
     SW = _store(funct3=S.Funct.SW)
@@ -342,15 +346,21 @@ class RV32I(ISA):
     class U(IL):
         layout = ("opcode", "rd", "imm")
 
-        @xfrm
-        def check_xfrm(imm) -> ("imm",):
+    class CheckXfrm(ITransform):
+        def __init__(self, ilcls):
+            super().__init__(ilcls, inputs=["imm"], layout=["imm"])
+
+        def inputs_to_layout(self, *, imm):
             if imm > 0:
                 assert 0 < imm <= 2**20 - 1, f"imm is {imm}"
             elif imm < 0:
                 assert 0 < -imm <= 2**20 - 1, f"imm is {imm}"
             return {"imm": imm}
 
-    _upper = U().xfrm(U.check_xfrm)
+        def layout_to_inputs(self, *, imm):
+            return {"imm": imm}
+
+    _upper = U().xfrm(CheckXfrm)
     LUI = _upper(opcode="LUI")
     AUIPC = _upper(opcode="AUIPC")
 

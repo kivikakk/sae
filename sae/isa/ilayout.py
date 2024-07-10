@@ -189,7 +189,10 @@ class ILayout:
             matching = (inp >> start) & (2 ** (end - start) - 1)
             kwargs[elem] = matching
 
-        return reduce(lambda kwargs, xfn: xfn.reverse(kwargs), self.xfrms, kwargs)
+        try:
+            return reduce(lambda kwargs, xfn: xfn.reverse(kwargs), self.xfrms, kwargs)
+        except ITransform.MatchError:
+            return None
 
     def args_for(self, **kwargs):
         combined = reduce(lambda kwargs, xfn: xfn(kwargs), self.xfrms, self.kwargs | kwargs)
@@ -273,14 +276,22 @@ class ILayout:
                 clone.valid_args.remove(name)
                 clone.asm_args.remove(name)
             def pipe(kwargs):
+                reduced = kwargs.copy()
                 try:
-                    args = {k: kwargs.pop(k) for k in xfrm.inputs}
+                    args = {k: reduced.pop(k) for k in xfrm.inputs}
                 except KeyError:
                     return kwargs
-                return {**kwargs, **xfrm.inputs_to_layout(**args)}
+                return {**reduced, **xfrm.inputs_to_layout(**args)}
             def reverse(kwargs):
-                args = {k: kwargs.pop(k) for k in xfrm.layout}
-                return {**kwargs, **xfrm.layout_to_inputs(**args)}
+                reduced = kwargs.copy()
+                try:
+                    args = {k: reduced.pop(k) for k in xfrm.layout}
+                except KeyError:
+                    return kwargs
+                result = xfrm.layout_to_inputs(**args)
+                if result is None:
+                    raise ITransform.MatchError
+                return {**reduced, **result}
             pipe.reverse = reverse
             clone.xfrms.insert(0, pipe)
         else:
@@ -294,6 +305,9 @@ class ITransform:
     inputs: list[str]
     layout: list[str]
 
+    class MatchError(RuntimeError):
+        pass
+
     def __init__(self, ilcls: type[ILayout], *, inputs: list[str], layout: list[str]):
         self.ilcls = ilcls
         self.inputs = inputs
@@ -306,22 +320,3 @@ class ITransform:
     def layout_to_inputs(self, **kwargs):
         "Reverses `inputs_to_layout`."
         raise NotImplementedError
-
-
-def xfrm(return_annotation=None):
-    # HACK: allow @xfrm as shorthand for @xfrm().
-    if inspect.isfunction(return_annotation):
-        return xfrm()(return_annotation)
-
-    def wrapper(inner):
-        if return_annotation is not None:
-            inner.return_annotation = tuple(return_annotation)
-
-        def reverse_fn(reverse):
-            inner.reverse = reverse
-
-        inner.reverse_fn = reverse_fn
-
-        return inner
-
-    return wrapper

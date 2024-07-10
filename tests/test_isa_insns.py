@@ -111,11 +111,11 @@ def test_match_rs1off_xfrm():
 def test_match_fence_xfrm():
     kwargs = {"pred": "rw", "succ": "io"}
     v = RV32I.FENCE.value(**kwargs)
-    assert RV32I.FENCE.match_value(v) == kwargs | {"fm": 0}
+    assert RV32I.FENCE.match_value(v) == kwargs
     assert RV32I.FENCE_TSO.match_value(v) is None
 
     v = RV32I.FENCE_TSO.value()
-    assert RV32I.FENCE.match_value(v) == {"pred": "rw", "succ": "rw", "fm": 0b1000}
+    assert RV32I.FENCE.match_value(v) is None
     assert RV32I.FENCE_TSO.match_value(v) == {}
 
 
